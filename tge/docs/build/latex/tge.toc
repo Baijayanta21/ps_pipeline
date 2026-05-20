@@ -1,0 +1,4 @@
+\babel@toc {english}{}\relax 
+\contentsline {chapter}{\numberline {1}grid module}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Tapered Gridded Estimator (TGE)}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Module Functions}{3}{section.1.2}%
