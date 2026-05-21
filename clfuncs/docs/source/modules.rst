@@ -1,5 +1,5 @@
-test_corr
-=========
+clfuncs
+=======
 
 .. toctree::
    :maxdepth: 4

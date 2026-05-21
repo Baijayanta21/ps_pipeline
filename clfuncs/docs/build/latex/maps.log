@@ -1,4 +1,4 @@
-This is LuaHBTeX, Version 1.14.0 (TeX Live 2022/dev/Debian)  (format=lualatex 2026.1.31)  20 MAY 2026 18:06
+This is LuaHBTeX, Version 1.14.0 (TeX Live 2022/dev/Debian)  (format=lualatex 2026.1.31)  21 MAY 2026 13:56
  restricted system commands enabled.
 **maps.tex
 (./maps.tex
@@ -1302,7 +1302,7 @@ share/texmf/fonts/type1/public/lm/lmssbo10.pfb></usr/share/texmf/fonts/type1/pub
 lic/lm/lmssbx10.pfb></usr/share/texmf/fonts/type1/public/lm/lmtk10.pfb></usr/sha
 re/texmf/fonts/type1/public/lm/lmtt10.pfb></usr/share/texmf/fonts/type1/public/l
 m/lmtti10.pfb>
-Output written on maps.pdf (7 pages, 234705 bytes).
+Output written on maps.pdf (7 pages, 234675 bytes).
 
 PDF statistics: 129 PDF objects out of 1000 (max. 8388607)
  99 compressed objects within 1 object stream

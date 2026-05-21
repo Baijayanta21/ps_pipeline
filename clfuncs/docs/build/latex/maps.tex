@@ -102,7 +102,7 @@
     
 
 \title{maps}
-\date{May 20, 2026}
+\date{May 21, 2026}
 \release{1.0.0}
 \author{AE,SB,BB}
 \newcommand{\sphinxlogo}{\vbox{}}
@@ -433,15 +433,12 @@ np.ndarray
 \PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{} }\PYG{n}{Nbin} \PYG{o}{=} \PYG{n+nb}{int}\PYG{p}{(}\PYG{n}{BIN}\PYG{p}{[}\PYG{l+s+s1}{\PYGZsq{}}\PYG{l+s+s1}{Nbin}\PYG{l+s+s1}{\PYGZsq{}}\PYG{p}{]}\PYG{p}{)}
 \PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{} }\PYG{c+c1}{\PYGZsh{} Contains info about which grid point fall into which bin}
 \PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{} }\PYG{n}{ni}   \PYG{o}{=} \PYG{n}{BIN}\PYG{p}{[}\PYG{l+s+s1}{\PYGZsq{}}\PYG{l+s+s1}{ni}\PYG{l+s+s1}{\PYGZsq{}}\PYG{p}{]}
-\PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{}}
 \PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{} }\PYG{n}{GV} \PYG{o}{=} \PYG{n}{np}\PYG{o}{.}\PYG{n}{load}\PYG{p}{(}\PYG{l+s+s1}{\PYGZsq{}}\PYG{l+s+s1}{/home/baijayanta/CFFI\PYGZus{}C/GV\PYGZus{}7200\PYGZus{}pool.npy}\PYG{l+s+s1}{\PYGZsq{}}\PYG{p}{)}
 \PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{} }\PYG{c+c1}{\PYGZsh{} GV shape [nstokes,ni,NC] with nstokes = 2}
 \PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{} }\PYG{n+nb}{print}\PYG{p}{(}\PYG{l+s+sa}{f}\PYG{l+s+s1}{\PYGZsq{}}\PYG{l+s+si}{\PYGZob{}}\PYG{n}{GV}\PYG{o}{.}\PYG{n}{shape}\PYG{+w}{   }\PYG{l+s+si}{= \PYGZcb{}}\PYG{l+s+s1}{\PYGZsq{}}\PYG{p}{)}
 \PYG{g+go}{GV.shape   = (2, 46438, 768)}
-\PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{}}
 \PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{} }\PYG{n+nb}{print}\PYG{p}{(}\PYG{l+s+sa}{f}\PYG{l+s+s1}{\PYGZsq{}}\PYG{l+s+s1}{No of Bins = }\PYG{l+s+si}{\PYGZob{}}\PYG{n}{Nbin}\PYG{l+s+si}{\PYGZcb{}}\PYG{l+s+s1}{\PYGZsq{}}\PYG{p}{)}
 \PYG{g+go}{No of Bins = 20}
-\PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{}}
 \PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{} }\PYG{c+c1}{\PYGZsh{} perform correlation}
 \PYG{g+gp}{\PYGZgt{}\PYGZgt{}\PYGZgt{} }\PYG{n}{corr} \PYG{o}{=} \PYG{n}{correlate}\PYG{o}{.}\PYG{n}{correlate}\PYG{p}{(}\PYG{n}{GV}\PYG{p}{,} \PYG{n}{ni}\PYG{p}{,} \PYG{n}{Nbin}\PYG{p}{)}
 \PYG{g+go}{Channels   : 768}
