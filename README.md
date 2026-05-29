@@ -1,5 +1,5 @@
 # ps_pipeline
-Necessary codes to estimate power specturm from visibility data using tge **Tapered Gridded Estimator**
+Necessary codes to estimate power spectrum from visibility data using tge **Tapered Gridded Estimator**.
 
 ## How to install
 
