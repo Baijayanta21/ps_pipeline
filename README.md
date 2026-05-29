@@ -62,3 +62,25 @@ Successfully built myutils
 Installing collected packages: PyYAML, packaging, numpy, llvmlite, astropy-iers-data, scipy, pyerfa, numba, astropy, healpy, myutils
 Successfully installed PyYAML-6.0.3 astropy-6.1.7 astropy-iers-data-0.2026.5.25.1.14.13 healpy-1.19.0 llvmlite-0.47.0 myutils-1.0.0 numba-0.65.1 numpy-2.2.6 packaging-26.2 pyerfa-2.0.1.5 scipy-1.15.3
 ```
+
+After the installation to verify run :
+
+```bash
+pip show myutils
+```
+
+And it will show the following details :
+
+```bash
+Name: myutils
+Version: 1.0.0
+Summary: Utility functions for MWA visibility simulation, TGE and PS estimation.
+Home-page: 
+Author: 
+Author-email: Baijayanta Bhattacharyya <baijayantabhattacharyya2021@gmail.com>
+License: 
+Location: /home/cts23ph/myutils/lib/python3.10/site-packages
+Requires: astropy, healpy, numba, numpy, scipy
+Required-by: 
+
+```
