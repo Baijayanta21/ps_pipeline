@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: myutils
+Version: 1.0.0
+Summary: Utility functions for MWA visibility simulation, TGE and PS estimation.
+Author-email: Baijayanta Bhattacharyya <baijayantabhattacharyya2021@gmail.com>
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: astropy
+Requires-Dist: healpy
+Requires-Dist: numba
+Dynamic: license-file
+
+# ps_pipeline
+Necessary codes to estimate power specturm from visibility data using tge

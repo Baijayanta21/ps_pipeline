@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "myutils"
+version = "1.0.0"
+authors = [
+  { name="Baijayanta Bhattacharyya", email="baijayantabhattacharyya2021@gmail.com" }
+]
+description = "Utility functions for MWA visibility simulation, TGE and PS estimation."
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+    "numpy","scipy","astropy","healpy","numba",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
