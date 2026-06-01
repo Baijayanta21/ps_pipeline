@@ -65,7 +65,7 @@ The functional form's are given as :
 
     \begin{figure}[H]
     \centering
-    \includegraphics[width=1.05\linewidth]{../../../windows_123.pdf}
+    \includegraphics[width=1.05\linewidth]{../../../../../Tutorials/others/windows_123.pdf}
     \caption{Different window functions with different smoothing scales.}
     \end{figure}  
     
@@ -130,40 +130,41 @@ def doscf(GV, SM, window = 'hann', method = 'auto'):
     Examples
     --------
     >>> import numpy as np
-    >>> import scf
-    Imported SCF, Import Time : 21/05/26 | 03:00:01 PM
-    >>> GV = np.load("/home/baijayanta/GV_7200_pool.npy") # GV array
+    >>> import myutils.scf.scf as sf
+    Imported myutils
+    Imported SCF,       Import Time : 30/05/26 | 05:30:25 PM
+    >>> GV = np.load("/home/cts23ph/git_package_myutils/tge/GV_7200.npy") # GV array
     >>> print(f"{GV.shape = }")
-    GV.shape = (2, 46438, 768)
+    GV.shape = (2, 457, 457, 768)
     >>> SM = 2 # smoothing scale in MHz
     >>> NW = int(SM/0.04)
     >>> print(f"{NW = }")
     NW = 50
-    >>> NW = 50
     >>> # perform SCF
-    >>> GV_filtered = scf.doscf(GV, SM, window = 'hann', method = 'fft')
+    >>> GVr = sf.doscf(GV, SM, window = 'hann', method = 'fft')
     <============= Performing SCF =============>
-    <=== Start Time: 21/05/26 | 03:00:16 PM ===>
+    <=== Start Time: 30/05/26 | 05:29:00 PM ===>
     Convoluting kernel : fft
     Window function    : Hanning
     Smoothing scale    : 2 MHz
-    <=== End Time  : 21/05/26 | 03:00:18 PM ===>
-    <=== Elapsed   : 00:00:02.53, 2.533 seconds.
+    <=== End Time  : 30/05/26 | 05:29:09 PM ===>
+    <=== Elapsed   : 00:00:09.24, 9.240 seconds.
     <================ Done SCF ================>
-    >>> print(f"{GV_filtered.shape = }") # 768-2*NW
-    GV_filtered.shape = (2, 46438, 668)
-	
+    >>> print(f"{GVr.shape = }") # 768-2*NW
+    GVr.shape = (2, 457, 457, 668)
+
+    
     .. raw:: latex
 
     	\begin{figure}[H]
     	\centering
-    	\includegraphics[width=1.05\linewidth]{../../../Flag.pdf}
+    	\includegraphics[width=1.05\linewidth]{../../../../../Tutorials/others/Flag.pdf}
     	\caption{The Flagging of MWA data. The black colored regions are flagged.}
    	\end{figure}  
    	
     	\begin{figure}[H]
     	\centering
-    	\includegraphics[width=1.05\linewidth]{../../../scf.pdf}
+    	\includegraphics[width=1.05\linewidth]{../../../../../Tutorials/others/scf.pdf}
     	\caption{Real part of $\mathcal{V}_{cg},\mathcal{V}_{cg}^{S},\mathcal{V}_{cg}^{F}$ as a function of frequency $\nu$ for a fixed grid point corresponding to $\ell_g = 261$. This is shown only for XX polarization.}
    	\end{figure}  
     

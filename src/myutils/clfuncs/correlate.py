@@ -45,7 +45,7 @@ def correlate(GV, ni, Nbin):
 
     .. math ::
 
-        \text{corr}(\nu_a,\nu_b) = \mathcal{R}e\left[\mathcal{V}_{cg}^{\rm RR}(\nu_a) \mathcal{V}_{cg}^{*\rm LL}(\nu_b) + \mathcal{V}_{cg}^{\rm LL}(\nu_a) \mathcal{V}_{cg}^{*\rm RR}(\nu_b) \right]
+        \text{corr}(\nu_a,\nu_b) = \mathcal{R}e\left[\mathcal{V}_{cg}^{\rm XX}(\nu_a) \mathcal{V}_{cg}^{*\rm YY}(\nu_b) + \mathcal{V}_{cg}^{\rm YY}(\nu_a) \mathcal{V}_{cg}^{*\rm XX}(\nu_b) \right]
 
     Then it collapses the frequency axis to get :math:`\text{corr}(\Delta\nu)`.
     
@@ -66,24 +66,25 @@ def correlate(GV, ni, Nbin):
     Examples
     --------
     >>> import numpy as np
-    >>> import correlate 
-    Imported correlate, Import Time : 20/05/26 | 06:03:15 PM
+    >>> import myutils.clfuncs.correlate as corrf
+    Imported myutils
+    Imported correlate, Import Time : 30/05/26 | 12:45:40 PM
     >>> # Load binning info
-    >>> BIN  = np.load('/home/baijayanta/MY_Documented_Code/tge/bin_info_7200.npz')
-    >>> # No of annular bins the whole uv plane has been divided into
-    >>> Nbin = int(BIN['Nbin'])    
-    >>> # Contains info about which grid point fall into which bin
-    >>> ni   = BIN['ni']             
-    >>> GV = np.load('/home/baijayanta/CFFI_C/GV_7200_pool.npy')
-    >>> # GV shape [nstokes,ni,NC] with nstokes = 2
-    >>> print(f'{GV.shape   = }')    
-    GV.shape   = (2, 46438, 768)
+    >>> BIN  = np.load('/home/cts23ph/git_package_myutils/tge/bin_info_1000007200.npz')
+    >>> Nbin = int(BIN['Nbin'])      # No of annular bins the whole uv plane has been divided into
+    >>> ni   = BIN['ni']             # Contains info about which grid point fall into which bin
+    >>> mask = BIN['NI'] >= 0        # mask array
+    >>> GV = np.load('/home/cts23ph/git_package_myutils/tge/GV_7200.npy')
+    
+    >>> print(f'{GV.shape   = }')    # GV shape [nstokes,ni,NC] with nstokes = 2
+    GV.shape   = (2, 457, 457, 768)
     >>> print(f'No of Bins = {Nbin}')
     No of Bins = 20
     >>> # perform correlation
-    >>> corr = correlate.correlate(GV, ni, Nbin)
+    >>> # corr shape (Nbin, NC)
+    >>> corr = corrf.correlate(GV[:, mask], ni, Nbin)
     Channels   : 768
-    Time Taken : 7.400 seconds.
+    Time Taken : 5.962 seconds.
     >>> print(f'{corr.shape   = }') 
     corr.shape   = (20, 768)
     

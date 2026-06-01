@@ -64,7 +64,7 @@ To run:
 
 .. code-block:: python
 
-    >> import simvis as sv
+    >> import myutils.simvis.simvis as sv
     >> # skysimtype = '2D' for 2D sky signal (multiple realizations)
     >> # skysimtype = '3D' for 3D sky signal 
     >> sv.sim_vis(infits, outfits, skysimtype)
@@ -133,7 +133,7 @@ To do this run:
  .. code-block:: python
     
         >> import numpy as np
-        >> import simvis as sv
+        >> import myutils.simvis.simvis as sv
         >> def myaps(l):
         >>     Amp  = 50   # in mK^2 unit
         >>     beta = -1   # power index
@@ -259,7 +259,7 @@ If you want to give your own power spectrum function (make sure it is vectorized
     
         >> import numpy as np
         >> import builtins as blt
-        >> import simvis as sv
+        >> import myutils.simvis.simvis as sv
         >> # make sure all are float.
         >> blt.A  =  1.0
         >> blt.s  = -3.0
@@ -302,7 +302,7 @@ Before you can simulate, you need to first set some parameters related to simula
 
 .. code-block:: python
 
-    >> import simvis as sv
+    >> import myutils.simvis.simvis as sv
     >> import builtins as blt
     >>
     >> # Set simulation parameters
@@ -512,7 +512,7 @@ def sky3dgrf(nside, seed, psfunc = ps):
     
         >> import numpy as np
         >> import builtins as blt
-        >> import simvis as sv
+        >> import myutils.simvis.simvis as sv
         >> # make sure all are float.
         >> blt.A  =  1.0
         >> blt.s  = -3.0

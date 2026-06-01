@@ -92,9 +92,10 @@ def mkbin(GV, dU, Umax, FWHM, f, binUmax, binUmin, Nbin, Mg_min, outf):
 
     Examples
     --------
+    >>> import myutils.tge.grid as gd
+    Imported myutils
+    Imported Grid,      Import Time : 30/05/26 | 12:40:19 PM
     >>> # BIN INFO
-    >>> import grid as gd
-    Imported Grid, Import Time : 19/05/26 | 07:48:35 PM
     >>> # ===================================================
     >>> # Set the gridding parameters in the TGE code
     >>> n1      = 0     # Starting channel number
@@ -112,18 +113,21 @@ def mkbin(GV, dU, Umax, FWHM, f, binUmax, binUmin, Nbin, Mg_min, outf):
     >>> binUmax = 220   # max |U| used in getting binning information
     >>> Mg_min  = 0.01  # M_g cutoff, grid points have less than this will be rejected
     >>> 
-    >>> inpath   = '/home/baijayanta/Complete_Pipeline/uaps_files/'
-    >>> filename = '1000007200_out_uaps_15.fits'
+    >>> inpath   = '/home/cts23ph/git_package_myutils/simvis/simulated/'
+    >>> filename = '1000007200_uaps.fits'
+    >>> 
     >>> # name of input .fits file for which we will calculate the bin info
     >>> infile   = inpath + filename     
+    >>> 
     >>> # grid it # ([Nstokes,Nu,Nv,Nc],(dU,Umax,FWHM,f))
     >>> GV, info = gd.grid(infile,n1,n2,nrel,Umax,FWHM,f,Flag, nstokes)  
     <<<<<<<<<<< TGE >>>>>>>>>>>>
-    << 19/05/26 | 07:48:35 PM >>
+    << 30/05/26 | 12:40:28 PM >>
     Type  : Data
-    << 19/05/26 | 07:48:48 PM >>
-    Elapsed   :   00:00:12.82
+    << 30/05/26 | 12:40:35 PM >>
+    Elapsed   :   00:00:07.33
     <<<<<<<<<<< Done >>>>>>>>>>>
+    >>> 
     >>> # make bin info
     >>> gd.mkbin(GV[0], info[0], info[1], info[2], info[3], binUmax, 
     ...                              binUmin, Nbin, Mg_min, outf = 'bin_info_7200')
@@ -253,8 +257,9 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
 
     Examples
     --------
-    >>> import grid as gd
-    Imported Grid, Import Time : 19/05/26 | 07:28:16 PM
+    >>> import myutils.tge.grid as gd
+    Imported myutils
+    Imported Grid,      Import Time : 30/05/26 | 12:42:19 PM
     >>> # Set the gridding parameters in the TGE code
     >>> n1       = 0     # Starting channel number
     >>> n2       = 767   # End channel number  
@@ -263,14 +268,14 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
     >>> f        = 0.6   # Tapering parameter value
     >>> Flag     = True  # Apply actual flagging of data
     >>> nstokes  = [0,1] # 0 for XX and 1 for YY (which polarizations you want to grid)
-    >>> infile   = '/home/MWA/data_cutoff/1000000000.fits' # fits file name
+    >>> infile   = '/home/MWA_data/1000007200.fits' # fits file name
     >>> nrel     = -1  # data file
     >>> GV, info = gd.grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes)
     <<<<<<<<<<< TGE >>>>>>>>>>>>
-    << 19/05/26 | 07:28:16 PM >>
+    << 30/05/26 | 12:42:41 PM >>
     Type  : Data
-    << 19/05/26 | 07:30:05 PM >>
-    Elapsed   :   00:01:49.04
+    << 30/05/26 | 12:44:33 PM >>
+    Elapsed   :   00:01:52.34
     <<<<<<<<<<< Done >>>>>>>>>>>
     >>> print(f"{GV.shape = }")
     GV.shape = (2, 457, 457, 768)
@@ -282,6 +287,7 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
     Umax : 250      
     FWHM : 23 degrees      
     f    : 0.6
+
     """
     start = datetime.now()
     print(f"<<<<<<<<<<< TGE >>>>>>>>>>>>")

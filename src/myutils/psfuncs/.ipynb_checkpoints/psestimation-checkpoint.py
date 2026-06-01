@@ -99,14 +99,15 @@ def build_essential(nuc, dnuc, NE, lval, model = 'Planck18'):
     Examples
     --------
     >>> import numpy as np
-    >>> import psestimation as pe
-    imported ps
+    >>> import myutils.psfuncs.psestimation as pe
+    Imported myutils
+    Imported psfuncs,   Import Time : 01/06/26 | 04:05:54 PM
     >>> nuc  = 154.255 # observing frequency in MHz
     >>> dnuc = 0.04    # freq separation in MHz
     >>> NE   = 668     # no of channels used to estimate PS 
     >>> # ell values array
-    >>> lval = np.array([  68,  137,  199,  263,  347,  412,  477,  540,  605,  670,
-    ...                    737, 805,  876,  941, 1010, 1075, 1148, 1216, 1282, 1346])
+    >>> fname = '/home/cts23ph/git_package_myutils/tge/bin_info_1000007200.npz'
+    >>> lval  = (np.load(fname)['lval']).astype('int')
     >>> r, rp, fac, vfac, kper, kpara = pe.build_essential(nuc, dnuc, NE, lval)
     --------------------------------------
     Cosmological Model: Planck18
@@ -120,7 +121,7 @@ def build_essential(nuc, dnuc, NE, lval, model = 'Planck18'):
     kper.shape                 : (20,)          
     kpara.shape                : (668,)
     --------------------------------------
-    
+
     >>> r, rp, fac, vfac, kper, kpara = pe.build_essential(nuc, dnuc, NE, lval,
     ...                                                      model = 'FlatLambdaCDM')
     --------------------------------------
@@ -136,7 +137,8 @@ def build_essential(nuc, dnuc, NE, lval, model = 'Planck18'):
     kpara.shape                : (668,)
     --------------------------------------
     >>> # kper  shape (len(lval),)
-    >>> # kpara shape (NE,)
+    >>> # kpara shape (NE,) 
+
     
     .. raw:: latex
     
@@ -371,7 +373,16 @@ def window(N):
 
     .. raw:: latex
 
+        \begin{figure}[H]
+        \centering
+        \includegraphics[]{../../../../../Tutorials/others/window.pdf}
+        \caption{Blackman-Nuttal window function for $N_E=668$ with $\Delta\nu_c = 0.04\,\text{\rm MHz}$.}
+        \end{figure}  
+
         \noindent\rule{\linewidth}{0.4pt}
+
+        \newpage
+        
     """
     
     window_value = scipy.signal.windows.nuttall(2*N-2,sym = False)[:N][::-1] 
@@ -456,6 +467,23 @@ def func_pk(cl, w, covi, vfac):
 
     Examples
     --------
+    >>> index = 7200
+    >>> cl   = np.load(f'/home/cts23ph/git_package_myutils/clfuncs/cldnur_{index}.npy')[...,:NE]
+    >>> cln  = np.load(f'/home/cts23ph/git_package_myutils/clfuncs/cldnur_noise_{index}.npy')[...,:NE]
+    >>> dcln = np.std(cln, axis = 0)
+    >>> covi = 1/dcln**2
+    >>> # window for Fourier transform
+    >>> w    = pe.window(NE) 
+    >>> # MLE cylindrical PS P(kper, kpara)
+    >>> pk   = pe.func_pk(cl, w, covi, vfac)
+    >>> print(f'{cl.shape        = }\
+    ...       \n{covi.shape      = }\
+    ...       \n{w.shape         = }\
+    ...       \n{pk.shape        = }')
+    cl.shape        = (20, 668)      
+    covi.shape      = (20, 668)      
+    w.shape         = (668,)      
+    pk.shape        = (20, 668)
 
     Notes
     -----
@@ -478,10 +506,18 @@ def func_pk(cl, w, covi, vfac):
             \vdots & \vdots & \ddots & \vdots \\ 
             0 & 0 & \cdots & \left[\delta C_{\ell_a}\left(\Delta\nu_{n=N_E-1}\right)\right]_{\rm noise}^2\\
         \end{bmatrix}
-
+ 
     .. raw:: latex
-    
-        \clearpage
+
+        \begin{figure}[H]
+        \centering
+        \includegraphics[]{../../../../../Tutorials/others/cyl_ps_7200.pdf}
+        \caption{Cylindrical Power Spectrum $P(k_\perp,k_\parallel)$.}
+        \end{figure}  
+
+        \newpage
+
+        
     """
 
 
@@ -529,10 +565,79 @@ def X(pk, dpkn, flag_mask):
 
     Examples
     --------
+    >>> # Noise Power Spectrum
+    >>> # MLE cylindrical PS P(kper, kpara)       # noise
+    >>> pkn   = pe.func_pk(cln, w, covi, vfac)    # noise ps
+    >>> dpkn  = np.std(pkn, axis = 0)             # std noise of ps
+    >>> dpkn *= (20)**2                           # scale the noise accordingly
+    >>> # flag mask array
+    >>> fm = np.load('/home/cts23ph/git_package_myutils/psfuncs/flag_mask.npy')
+    >>> print(f'{pkn.shape       = }\
+    ...       \n{dpkn.shape      = }\
+    ...       \n{fm.shape        = }')
+    pkn.shape       = (50, 20, 668)      
+    dpkn.shape      = (20, 668)      
+    fm.shape        = (20, 668)
+    >>> X, mu, sigma = pe.X(pk, dpkn, fm) # X statistics
+    >>> np.set_printoptions(precision = 3, suppress = True) 
+    >>> print(f'{X.shape = }\
+    ...        \nmu      = {mu}\
+    ...        \nsigma   = {sigma}')
+    X.shape = (503,)       
+    mu      = 0.2797964155866535       
+    sigma   = 1.2258385055783663
 
     .. raw:: latex
 
-        \clearpage
+        \begin{figure}[H]
+        \centering
+        \includegraphics[]{../../../../../Tutorials/others/X_7200.pdf}
+        \caption{X statistics. The magenta colored line shows student t fit.}
+        \end{figure}  
+
+
+    Notes
+    -----
+    Here is how you can make flag mask array.
+
+    .. code-block:: python
+    
+        >> flag_mask = np.zeros((kper.size,kpara.size), dtype = 'int')
+        >> print(flag_mask.shape)
+        >> ks  = np.array([0.135, 0.228, 0.36, 0.5, 0.72, 0.8, 0.92, 1.09, 1.17, 1.39])
+        >> ksv = np.array([0,0,1,2,2,2])
+        >> for ii in range(len(ksv)):
+        >>     for jj in range(ksv[ii],len(ksv)-1):
+        >>         mask = (kpara>=ks[2*jj])*(kpara<=ks[2*jj+1])
+        >>         flag_mask[ii,mask] = 1
+        >> np.save('flag_mask.npy',flag_mask)   # save the array
+
+    Where the modes used is tabulated below : 
+
+    .. raw:: latex 
+
+        \begin{table}
+        \centering
+        \setlength{\tabcolsep}{10pt}
+        \setlength{\arrayrulewidth}{0.5pt}
+        \renewcommand{\arraystretch}{1.4}
+        \setlength{\doublerulesep}{1.5pt}  % <-- reduce space between double lines
+        \resizebox{0.8\textwidth}{!}{
+        \begin{tabular}{|c|c|c|c|c|c|}
+        \hline
+        $k_{\perp}\,\rm Mpc^{-1}$ & \multicolumn{5}{c|}{$k_{\parallel} \,\rm Mpc^{-1}$} \\
+        \hline
+        $0.007$ & $0.135-0.228$ & $0.360-0.499$ & $0.720-0.797$ & $0.921-1.095$ & $1.171-1.399$ \\\hline
+        $0.015$ & $0.135-0.228$ & $0.360-0.499$ & $0.720-0.797$ & $0.921-1.095$ & $1.171-1.399$ \\\hline
+        $0.022$ & $-$           & $0.360-0.499$ & $0.720-0.797$ & $0.921-1.095$ & $1.171-1.399$ \\\hline
+        $0.029$ & $-$           & $-$           & $0.720-0.797$ & $0.921-1.095$ & $1.171-1.399$ \\\hline
+        $0.038$ & $-$           & $-$           & $0.720-0.797$ & $0.921-1.095$ & $1.171-1.399$ \\\hline
+        $0.045$ & $-$           & $-$           & $0.720-0.797$ & $0.921-1.095$ & $1.171-1.399$ \\\hline
+        \end{tabular}}
+        \caption{$k_{\parallel}$ ranges corresponding to different $k_{\perp}$ values that have been used to estimate binned PS and X statistics.}
+        \label{table:mask}
+        \end{table}
+
     """
     
     X = pk/dpkn # X statistics
@@ -586,7 +691,33 @@ def binned_pk(kper, kpara, pk, dpk, NBin, flag_mask):
       
     Examples
     --------
- 
+    >>> NBin = 5
+    >>> kk, ppk, dppk = pe.binned_pk(kper, kpara, pk, sigma*dpkn,
+    ...                              NBin, fm)
+    Bin count   : [ 26   3  60  96 318]
+    >>> # kk   = binned k values
+    >>> # ppk  = binned P(k) values
+    >>> # dppk = 1 sigma error in estimating binned P(k) values
+    >>> print(f'{kk.shape    = }\
+    ...       \n{ppk.shape   = }\
+    ...       \n{dppk.shape  = }')
+    kk.shape    = (5,)      
+    ppk.shape   = (5,)      
+    dppk.shape  = (5,)
+    >>> NBin = 8
+    >>> kk, ppk, dppk = pe.binned_pk(kper, kpara, pk, sigma*dpkn,
+    ...                              NBin, fm)
+    Bin count   : [ 15  11   0  45  18  72 150 192]
+    >>> # kk   = binned k values
+    >>> # ppk  = binned P(k) values
+    >>> # dppk = 1 sigma error in estimating binned P(k) values
+    >>> print(f'{kk.shape    = }\
+    ...       \n{ppk.shape   = }\
+    ...       \n{dppk.shape  = }')
+    kk.shape    = (7,)      
+    ppk.shape   = (7,)      
+    dppk.shape  = (7,) 
+
     Notes
     -----
     #. If no :math:`(k_{\perp},k_{\parallel})` mode contibutes to a bin, then we reject those bins in the end.
@@ -711,10 +842,32 @@ def func_dT(kk , ppk, dppk): # dppk binned delta P_N^{true}(k) = \sigma_est \tim
            \end{cases}
            \end{aligned}$}
 
+    .. raw:: latex
+    
+        \newpage
+
+    
     
     Examples
     --------
-            
+    >>> dk2, dpk2, snr, ul = pe.func_dT(kk, ppk, dppk)
+    >>> print(f'{dk2.shape   = }\
+    ...       \n{dpk2.shape  = }\
+    ...       \n{snr.shape   = }\
+    ...       \n{ul.shape    = }')
+    dk2.shape   = (7,)      
+    dpk2.shape  = (7,)      
+    snr.shape   = (7,)      
+    ul.shape    = (7,)
+
+    .. raw:: latex
+
+        \begin{figure}[H]
+        \centering
+        \includegraphics[]{../../../../../Tutorials/others/spheical_ps_7200.pdf}
+        \caption{Spherical Power Spectrum $P(k)$.}
+        \end{figure}  
+
     """
     
     # shape of kk is the same as the last axis shape of ppk and dppk, so that we can vectorize the operations.

@@ -44,7 +44,7 @@ def correlate(GV, ni, Nbin):
 
     .. math ::
 
-        \text{corr}(\nu_a,\nu_b) = \mathcal{R}e\left[\mathcal{V}_{cg}^{\rm RR}(\nu_a) \mathcal{V}_{cg}^{*\rm LL}(\nu_b) + \mathcal{V}_{cg}^{\rm LL}(\nu_a) \mathcal{V}_{cg}^{*\rm RR}(\nu_b) \right]
+        \text{corr}(\nu_a,\nu_b) = \mathcal{R}e\left[\mathcal{V}_{cg}^{\rm XX}(\nu_a) \mathcal{V}_{cg}^{*\rm YY}(\nu_b) + \mathcal{V}_{cg}^{\rm YY}(\nu_a) \mathcal{V}_{cg}^{*\rm XX}(\nu_b) \right]
 
     
     Parameters
@@ -64,26 +64,26 @@ def correlate(GV, ni, Nbin):
     Examples
     --------
     >>> import numpy as np
-    >>> import clfuncs as cfunc
-    Imported clfuncs, Import Time : 06/05/26 | 07:42:26 PM
-    >>> GV = np.load('GV_7320_pool.npy')
-    >>> print(f'GV.shape   : {GV.shape}') # GV shape [nstokes,ni,NC] with nstokes = 2
-    GV.shape   : (2, 46438, 768)  
+    >>> import myutils.clfuncs.clfuncs as cfunc
+    Imported myutils
+    Imported clfuncs,   Import Time : 30/05/26 | 12:57:37 PM
     >>> # Load binning info
-    >>> BIN  = np.load('BIN_7200.npz')
-    >>> # No of annular bins the whole uv plane has been divided into
-    >>> Nbin = int(BIN['Nbin']) 
-    >>> # Contains info about which grid point fall into which bin
-    >>> ni   = BIN['ni']        
-    >>> print(f'No of Bins : {Nbin}')
-    No of Bins : 20
+    >>> BIN  = np.load('/home/cts23ph/git_package_myutils/tge/bin_info_1000007200.npz')
+    >>> Nbin = int(BIN['Nbin'])      # No of annular bins the whole uv plane has been divided into
+    >>> ni   = BIN['ni']             # Contains info about which grid point fall into which bin
+    >>> mask = BIN['NI'] >= 0        # mask array
+    >>> GV = np.load('/home/cts23ph/git_package_myutils/tge/GV_7200.npy')
+    >>> print(f'{GV.shape   = }')    # GV shape [nstokes,ni,NC] with nstokes = 2
+    GV.shape   = (2, 457, 457, 768)
+    >>> print(f'No of Bins = {Nbin}')
+    No of Bins = 20
     >>> # perform correlation
-    >>> corr = cfunc.correlate(GV, ni, Nbin)
-    Channels   : 768
-    Time Taken : 11.381 seconds.
     >>> # corr shape (Nbin, NC, NC)
-    >>> print(f'corr.shape :{corr.shape}') # GV shape [nstokes,ni,NC] with nstokes = 2
-    corr.shape :(20, 768, 768)
+    >>> corr = cfunc.correlate(GV[:, mask], ni, Nbin)
+    Channels   : 768
+    Time Taken : 6.861 seconds.
+    >>> print(f'{corr.shape   = }') 
+    corr.shape   = (20, 768, 768)
     
     """
     start = time.time()
@@ -125,17 +125,15 @@ def cl_dnu_nubar(maps):
 
     Examples
     --------
-    >>> import numpy as np
-    >>> import clfuncs as cfunc
-    Imported clfuncs, Import Time : 07/05/26 | 10:37:02 AM
-    >>> maps = np.load('cl_maps_7200_noscf.npy')
+    >>> maps = np.load('cl_7200.npy')
     >>> # shape (Nbin, NC, NC)
-    >>> print(f'maps.shape   : {maps.shape}')
-    maps.shape   : (20, 668, 668)
+    >>> print(f'maps.shape    : {maps.shape}')
+    maps.shape    : (20, 768, 768)
     >>> maps1 = cfunc.cl_dnu_nubar(maps)
     >>> # shape (Nbin, NC, 2*NC -1)
     >>> print(f'maps1.shape   : {maps1.shape}')
-    maps1.shape   : (20, 668, 1335)
+    maps1.shape   : (20, 768, 1535)
+    
     """
     nell, nc = maps.shape[:-1]
     maps1 = np.full((nell, nc, 2*nc-1), fill_value = np.nan) # delta-nu, nubar
@@ -168,7 +166,8 @@ def cl_dnu(maps1):
     >>> maps2 = cfunc.cl_dnu(maps1)
     >>> # shape (Nbin, NC)
     >>> print(f'maps2.shape   : {maps2.shape}')
-    maps2.shape   : (20, 668)
+    maps2.shape   : (20, 768)
+    
     """
     return np.nanmean(maps1, axis = 2) # maps2
 
@@ -193,7 +192,8 @@ def cl_dnu_nua_nub(maps):
     >>> maps2 = cfunc.cl_dnu_nua_nub(maps) 
     >>> # shape (Nbin, NC)
     >>> print(f'maps2.shape   : {maps2.shape}')
-    maps2.shape   : (20, 668)
+    maps2.shape   : (20, 768)
+
     """
     return cl_dnu(cl_dnu_nubar(maps)) # maps2
 
