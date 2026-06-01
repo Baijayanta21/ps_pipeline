@@ -85,3 +85,7 @@ Required-by:
 
 ```
 
+Tutorials are at this link https://github.com/Baijayanta21/ps_pipeline/tree/1c16fa9f6cb85bbcfea34cbb0aed4f4256cc4a32/Tutorials
+
+
+The documentation is here 
