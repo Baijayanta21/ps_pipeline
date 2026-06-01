@@ -6,8 +6,8 @@ Necessary codes to estimate power spectrum from visibility data using tge **Tape
 First create a vitual environment through this :
 
 ```bash
-python3 -m venv myutils        # make a virtual environment if required
-source ~/myutils/bin/activate  # activate the virtual environment
+python3 -m venv .myutils        # make a virtual environment if required
+source ~/.myutils/bin/activate  # activate the virtual environment
 ```
 
 To install the python package run this command : 
