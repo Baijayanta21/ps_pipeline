@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Utility functions for MWA visibility simulation, TGE and PS estimation."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.6"
 
 dependencies = [
     "numpy","scipy","astropy","healpy","numba",
