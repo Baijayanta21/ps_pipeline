@@ -208,9 +208,12 @@ def doscf(GV, SM, window = 'hann', method = 'auto'):
     
     GV_SCF.real/=NR# normalized that incorporates flagging
     GV_SCF.imag/=NI# normalized that incorporates flagging
-    
-    
-    
+
+    # put the value to zero to those modes which are flagged in the data
+    (GV_SCF.real)[NormR[NW:-NW]==0.0] = 0.0
+    (GV_SCF.imag)[NormI[NW:-NW]==0.0] = 0.0
+
+
     # filtered convolved gridded visibility
     GV_filtered = GV[...,NW:-NW] - GV_SCF # subtract out the smooth part 
     
