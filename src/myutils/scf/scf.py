@@ -83,27 +83,6 @@ from datetime import datetime
 
 dnuc = 0.04 # separation between two channels in MHz
 
-flag_indices = np.array([
-  0,   1,   2,   3,  16,  28,  29,  30,  31,  32,  33,  34,  35,
- 48,  60,  61,  62,  63,  64,  65,  66,  67,  80,  92,  93,  94,
- 95,  96,  97,  98,  99, 112, 124, 125, 126, 127, 128, 129, 130,
-131, 144, 156, 157, 158, 159, 160, 161, 162, 163, 176, 188, 189,
-190, 191, 192, 193, 194, 195, 208, 220, 221, 222, 223, 224, 225,
-226, 227, 240, 252, 253, 254, 255, 256, 257, 258, 259, 272, 284,
-285, 286, 287, 288, 289, 290, 291, 304, 316, 317, 318, 319, 320,
-321, 322, 323, 336, 348, 349, 350, 351, 352, 353, 354, 355, 368,
-380, 381, 382, 383, 384, 385, 386, 387, 400, 412, 413, 414, 415,
-416, 417, 418, 419, 432, 444, 445, 446, 447, 448, 449, 450, 451,
-464, 476, 477, 478, 479, 480, 481, 482, 483, 496, 508, 509, 510,
-511, 512, 513, 514, 515, 528, 540, 541, 542, 543, 544, 545, 546,
-547, 560, 572, 573, 574, 575, 576, 577, 578, 579, 592, 604, 605,
-606, 607, 608, 609, 610, 611, 624, 636, 637, 638, 639, 640, 641,
-642, 643, 656, 668, 669, 670, 671, 672, 673, 674, 675, 688, 700,
-701, 702, 703, 704, 705, 706, 707, 720, 732, 733, 734, 735, 736,
-737, 738, 739, 752, 764, 765, 766, 767]) 
-
-# flag_indices # channel numbers which are flagged
-
 def doscf(GV, SM, window = 'hann', method = 'auto'):
     r"""
     Given gridded visibility array it performs **SCF (Smooth Component Filtering)** given a **window function** and **suitable smoothing scale**. It **subtracts out** the **smooth part** of it and returns **residual filtered visibilities**.
@@ -215,19 +194,22 @@ def doscf(GV, SM, window = 'hann', method = 'auto'):
     # np.expand_dims(win,axis = tuple(np.arange(GV.ndim-1))) done so that scipy can broadcast while convolving
     
     # GV_SCF shape (Npol,Nu,Nv,nc-2*NW) or (Npol,Ni,nc-2*NW)
+
     
-    GV_SCF_Norm = np.ones(nc)
-    GV_SCF_Norm[flag_indices] = 0.0 
-    # GV_SCF_Norm == 0 if flagged, 1 otherwise
+    NormR = np.ones_like(GV.real)
+    NormI = np.ones_like(GV.imag)
+
+    NormR[GV.real==0.0] = 0.0
+    NormI[GV.imag==0.0] = 0.0
+
     
-    Norm = convolve(GV_SCF_Norm, win, method = method, mode = 'valid')
+    NR = convolve(NormR, win_expand, method = method, mode = 'valid')  
+    NI = convolve(NormR, win_expand, method = method, mode = 'valid')  
     
-    GV_SCF/=Norm # normalized that incorporates flagging
+    GV_SCF.real/=NR# normalized that incorporates flagging
+    GV_SCF.imag/=NI# normalized that incorporates flagging
     
-    mask1 = np.where(GV_SCF_Norm[NW:-NW] == 0.0)[0] # extract the flag info for sliced part
     
-    # put the value to zero to those modes which are flagged in the data
-    GV_SCF[...,mask1] = 0.0
     
     # filtered convolved gridded visibility
     GV_filtered = GV[...,NW:-NW] - GV_SCF # subtract out the smooth part 
