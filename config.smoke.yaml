@@ -33,7 +33,13 @@ observation:
 
 gridding:
   Umax: 50               # small grid: ~(2, 103, 103, 200) ~ 70 MB
-  FWHM: 23
+  FWHM: 23               # primary beam FWHM (degrees) at FWHM_ref_mhz
+
+  # Frequency the FWHM above was measured at. The beam scales as lambda, so the
+  # value actually used is FWHM * FWHM_ref_mhz / nuc — 23 deg at 154.255 MHz
+  # becomes 19.4 deg at 182.4 MHz. null -> use FWHM literally, no scaling.
+  # This is what lets one config serve more than one band.
+  FWHM_ref_mhz: 154.255
   f: 0.6
   nstokes: [0, 1]
   flag: true
@@ -42,7 +48,13 @@ gridding:
 binning:
   Nbin: 8
   binUmin: 6.0
-  binUmax: 45            # inside Umax, and inside the nside reach below
+  binUmax: 45           # max |U| used for binning (wavelengths) at U_ref_mhz
+
+  # Frequency the |U| limits above (and gridding.Umax) were chosen at. |U| = b*nu/c
+  # for a fixed physical baseline, so they are rescaled by nuc / U_ref_mhz — this
+  # keeps the same ANTENNAS in play across bands, which is what makes two runs
+  # comparable. null -> take the limits literally.
+  U_ref_mhz: 154.255
   Mg_min: 0.01
 
 

@@ -14,15 +14,16 @@
 
 paths:
   # Input UVFITS holding the real visibilities. Required.
-  input_uvfits: /users/schatterjee/scratch3/project_MWA/hyperdrive_residual-R5_LF_RA39p7/MWA_LF_RA_39p7DEG_GOOD_PTG_HYP-R5.fits
+  input_uvfits: /users/schatterjee/scratch3/project_MWA/hyperdrive_residual-R5_LF/MWA_LF_RA_11DEG_GOOD_PTG_HYP-R5.fits
+    # input_uvfits: /users/schatterjee/scratch3/project_MWA/hyperdrive_residual-R5_HF_RA39p7/MWA_HF_RA_39p7DEG_GOOD_PTG_HYP-R5.fits
 
   # Everything the pipeline writes goes under here. Created if absent.
-  output_dir: /users/schatterjee/scratch3/project_MWA/hyperdrive_residual-R5_LF_RA39p7/ps_run_RA_39p7DEG
+  output_dir: /users/schatterjee/scratch3/project_MWA/hyperdrive_residual-R5_LF/ps_run_RA_11DEG
 
   # Label used in output filenames. null -> last 4 digits for a bare obsid
   # (1000007200.fits -> 7200), otherwise the whole filename stem.
   # Set it explicitly to keep product names short and meaningful.
-  index: RA39p7_R5
+  index: RA11_R5
 
   # UAPS reference UVFITS written by stage 1.
   # null -> {output_dir}/{index}_uaps.fits
@@ -87,7 +88,13 @@ io:
 
 gridding:
   Umax: 250              # reject baselines with |U| > Umax  (wavelengths)
-  FWHM: 23               # primary beam FWHM (degrees)
+  FWHM: 23               # primary beam FWHM (degrees) at FWHM_ref_mhz
+
+  # Frequency the FWHM above was measured at. The beam scales as lambda, so the
+  # value actually used is FWHM * FWHM_ref_mhz / nuc — 23 deg at 154.255 MHz
+  # becomes 19.4 deg at 182.4 MHz. null -> use FWHM literally, no scaling.
+  # This is what lets one config serve more than one band.
+  FWHM_ref_mhz: 154.255
   f: 0.6                 # tapering parameter; f <= 1 tapers harder
   nstokes: [0, 1]        # polarisation indices: 0=XX, 1=YY. Cross-TGE needs both.
   flag: true             # apply UVFITS weight-based flagging (weight <= 0 -> 0)
@@ -105,13 +112,29 @@ gridding:
 binning:
   Nbin: 20               # number of annular |U| bins
   binUmin: 6.0           # min |U| used for binning (wavelengths)
-  binUmax: 220           # max |U| used for binning (wavelengths)
+  binUmax: 220           # max |U| used for binning (wavelengths) at U_ref_mhz
+
+  # Frequency the |U| limits above (and gridding.Umax) were chosen at. |U| = b*nu/c
+  # for a fixed physical baseline, so they are rescaled by nuc / U_ref_mhz — this
+  # keeps the same ANTENNAS in play across bands, which is what makes two runs
+  # comparable. null -> take the limits literally.
+  U_ref_mhz: 154.255
   Mg_min: 0.01           # reject grid points with UAPS self-correlation below this
 
 
 simulation:
   nside: 512             # HEALPix resolution
-  Nrea: 10              # sky realisations; must be <= nchan
+
+  # Whether nside may be raised automatically when the simulated sky cannot reach
+  # binning.binUmax. The sky is band-limited at lmax = 3*nside - 1, i.e.
+  # |U|max = lmax / 2pi, and grid points beyond that get M_g ~ 0 and are cut.
+  #
+  # false -> nside is left exactly as set above. Annular bins past |U|max are then
+  # starved of modes, and the loader says how many. Cost scales as nside^2, so this
+  # is the setting to keep pinned when compute matters more than the outer bins.
+  nside_auto: false
+
+  Nrea: 100              # sky realisations; must be <= nchan
   chunk_size: 400        # baselines per matrix multiply — 400/32GB, 200/16GB, 100 below
   seed: 1                # base seed for the UAPS simulation
 
@@ -136,7 +159,7 @@ scf:
 
 
 noise:
-  n_realisations: 10     # more is better for std(); 50 is what the tutorials use
+  n_realisations: 100     # more is better for std(); 50 is what the tutorials use
   seed_start: 10000      # realisation i uses seed_start + i — must not collide
 
   # Realisations per SLURM array task; the array is ceil(n_realisations/per_task) tasks.
@@ -164,7 +187,7 @@ power_spectrum:
   # k range, and 8 bins leaves one of them empty (NaN, silently dropped). 6 fills
   # every bin. Raise it only if you widen the mask.
   NBin: 6
-  n_nights: 9            # nights of integration, used for the noise scaling
+  n_nights: 18            # nights of integration, used for the noise scaling
 
   # Multiplicative factor applied to the single-realisation noise std.
   # null -> sigma_N**2 with sigma_N = 60/sqrt(n_nights); at n_nights = 9 this is
@@ -198,29 +221,23 @@ power_spectrum:
   mask:
     preset: paper
 
-    # --- ALWAYS APPLIED: the foreground wedge ------------------------------
-    # Everything below the horizon line
+    # Exclude the foreground wedge: everything below the horizon line
     #     [k_par]_H = (r / r' nu_c) k_perp = fac * k_perp
-    # (the dashed line on the cylindrical figures) is excluded. There is no
-    # switch: a spherical average that includes the wedge measures foregrounds,
-    # not the 21-cm signal.
-    #
-    # Only the buffer is tunable — extra k_par above that line, in Mpc^-1. The
-    # wedge edge is not sharp, because the instrument's frequency response smears
-    # it, so a buffer is normal practice. The paper preset relies on its k_para
-    # floor instead and leaves this at 0.
+    # which is the dashed line drawn on the cylindrical figures.
+    use_wedge: null
+    # Extra k_par above that line, in Mpc^-1. The wedge edge is not sharp — the
+    # instrument's frequency response smears it — so a buffer is normal practice.
+    # The paper preset relies on its k_para floor instead and leaves this at 0.
     wedge_buffer: null
 
-    # --- OPTIONAL: rectangular k limits ------------------------------------
-    use_limits: null        # false -> ignore the four limits below
+    # Rectangular limits.
     kpara_min: null
     kpara_max: null
     kperp_min: null
     kperp_max: null
 
-    # --- OPTIONAL: per-k_perp k_para windows -------------------------------
-    # From kpara_ranges / kpara_start_index below. The paper preset carries its
-    # own copy, so this only matters without a preset.
+    # Per-k_perp k_para windows from kpara_ranges / kpara_start_index below.
+    # The paper preset carries its own copy, so this only matters without a preset.
     use_tabulated: null
   kpara_ranges: [0.135, 0.228, 0.36, 0.5, 0.72, 0.8, 0.92, 1.09, 1.17, 1.39]
   kpara_start_index: [0, 0, 1, 2, 2, 2]
@@ -269,9 +286,13 @@ slurm:
   # null -> {output_dir}/logs
   log_dir: null
 
-  # universal -> every stage appends to one file, {log_dir}/pipeline_{index}.log,
-  #              with stderr merged in. Each job writes a banner naming the stage,
-  #              job id, array task and host, so concurrent tasks stay attributable.
+  # universal -> the sequential stages append to one file,
+  #              {log_dir}/pipeline_{index}.log, with stderr merged in. Each job
+  #              writes a banner naming the stage, job id, array task and host.
+  #              ARRAY tasks (stage 4) get one file each,
+  #              pipeline_{index}_{job}_{task}.log — they must not share, because
+  #              concurrent appends from many nodes make most tasks fail to open
+  #              the file and exit within seconds.
   # per_job    -> the old behaviour, one .out and .err per job.
   log_mode: universal
 
@@ -306,7 +327,7 @@ slurm:
       time: "02:00:00"
       mem: 64G             # SCF peaks near 25 GB at 768 channels; 32G is too tight
       cpus_per_task: 16
-      throttle: 10
+      throttle: 4
     ps:
       time: "00:30:00"
       mem: 16G

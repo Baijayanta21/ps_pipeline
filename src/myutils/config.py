@@ -109,6 +109,9 @@ class Config(_Node):
         self._validate_sections()
         self._resolve_paths()
         self._read_header()
+        # must precede _resolve_derived: the nside check depends on binUmax, which
+        # this may move
+        self._rescale_to_band()
         self._resolve_derived()
 
     # -- validation ----------------------------------------------------------
@@ -224,6 +227,44 @@ class Config(_Node):
 
     # -- derived --------------------------------------------------------------
 
+    def _rescale_to_band(self):
+        r"""Move frequency-dependent settings from their reference band to this one.
+
+        ``FWHM`` and the ``|U|`` limits are properties of the *instrument at a given
+        frequency*, not of the array, so a config tuned for one band is quietly wrong
+        for another — nothing errors, the beam is simply the wrong width and the
+        limits select different baselines.
+
+        * ``gridding.FWHM`` is a beam width, :math:`\propto \lambda`, so it scales by
+          ``ref/nuc``.
+        * ``gridding.Umax``, ``binning.binUmin`` and ``binning.binUmax`` are in
+          wavelengths, and :math:`|U| = b\nu/c` for a fixed physical baseline *b*, so
+          they scale by ``nuc/ref``. Scaling them keeps the same *antennas* in play
+          across bands, which is what makes two runs comparable.
+
+        Set the corresponding ``*_ref_mhz`` to ``null`` to opt a group out and take
+        the numbers literally.
+        """
+        nuc = float(self.observation.nuc_mhz)
+        g, b = self.gridding, self.binning
+        self._rescaled = {}
+
+        fref = g.get('FWHM_ref_mhz')
+        if fref and abs(float(fref) - nuc) > 1e-6:
+            old = float(g.FWHM)
+            g.FWHM = old * float(fref) / nuc          # beam ~ lambda
+            self._rescaled['FWHM'] = (old, g.FWHM, 'deg')
+
+        uref = b.get('U_ref_mhz')
+        if uref and abs(float(uref) - nuc) > 1e-6:
+            s = nuc / float(uref)                      # |U| ~ nu
+            for node, key in ((g, 'Umax'), (b, 'binUmin'), (b, 'binUmax')):
+                if node.get(key) is None:
+                    continue
+                old = float(node[key])
+                node[key] = old * s
+                self._rescaled[key] = (old, node[key], 'lambda')
+
     def _resolve_derived(self):
         obs = self.observation
         if obs.get('n2') is None:
@@ -239,15 +280,48 @@ class Config(_Node):
         # Mg_min, and leave the outer annular bins empty — with no error anywhere.
         lmax = 3 * self.simulation.nside - 1
         self._sim_umax = lmax / (2.0 * np.pi)
+        self._nside_raised = None
         if self._sim_umax < self.binning.binUmax:
-            nside_needed = int(np.ceil((2.0 * np.pi * self.binning.binUmax + 1) / 3))
-            print(
-                f"WARNING: simulation.nside = {self.simulation.nside} gives "
-                f"lmax = {lmax}, so the UAPS sky only reaches "
-                f"|U| = {self._sim_umax:.1f} lambda, short of binning.binUmax = "
-                f"{self.binning.binUmax}. Bins beyond {self._sim_umax:.1f} will be "
-                f"starved of modes. Raise nside to >= {nside_needed}, or lower binUmax."
-            )
+            need = int(np.ceil((2.0 * np.pi * self.binning.binUmax + 1) / 3))
+            if self.simulation.get('nside_auto', True):
+                # HEALPix needs a power of two, so round up to the next one. Raising
+                # nside is expensive — cost goes as nside^2 — so say so loudly rather
+                # than letting it happen quietly.
+                old = int(self.simulation.nside)
+                new = 1 << int(np.ceil(np.log2(need)))
+                self.simulation.nside = new
+                self._nside_raised = (old, new)
+                self._sim_umax = (3 * new - 1) / (2.0 * np.pi)
+                print(
+                    f"NOTE: simulation.nside raised {old} -> {new} so the UAPS sky "
+                    f"reaches binning.binUmax = {self.binning.binUmax:.1f} lambda "
+                    f"(needed >= {need}). Cost scales as nside^2 — set "
+                    f"simulation.nside_auto: false to keep {old} and lose the outer "
+                    f"bins instead."
+                )
+            else:
+                # Say what it actually costs: mkbin lays Nbin equal-width annuli
+                # between binUmin and binUmax, so the number of affected bins is
+                # countable rather than a vague "the outer ones".
+                b = self.binning
+                width = (b.binUmax - b.binUmin) / b.Nbin
+                edges = b.binUmin + width * np.arange(b.Nbin + 1)
+                empty = int((edges[:-1] >= self._sim_umax).sum())
+                partial = int(((edges[:-1] < self._sim_umax) &
+                               (edges[1:] > self._sim_umax)).sum())
+                print(
+                    f"WARNING: simulation.nside = {self.simulation.nside} gives "
+                    f"lmax = {lmax}, so the UAPS sky reaches only "
+                    f"|U| = {self._sim_umax:.1f} lambda against binning.binUmax = "
+                    f"{b.binUmax:.1f}.\n"
+                    f"         Of {b.Nbin} annular bins: {empty} fall entirely "
+                    f"beyond it and will be empty, {partial} straddle it and will "
+                    f"be under-filled.\n"
+                    f"         nside_auto is off, so nside stays "
+                    f"{self.simulation.nside}. To keep every bin either raise nside "
+                    f"to >= {need}, or lower binning.binUmax to "
+                    f"<= {self._sim_umax:.0f}."
+                )
 
         if self.simulation.Nrea > obs.nchan:
             raise ValueError(
@@ -393,9 +467,15 @@ class Config(_Node):
         print(f"observation   : nuc = {obs.nuc_mhz:.4f} MHz, dnuc = {obs.dnuc_mhz:.4f} MHz, "
               f"nchan = {obs.nchan}{derived}")
         print(f"channels      : {obs.n1}-{obs.n2} ({self.nchan_used} used)")
-        print(f"gridding      : Umax = {g.Umax}, FWHM = {g.FWHM} deg, f = {g.f}, "
+        if getattr(self, '_rescaled', None):
+            ref_f = g.get('FWHM_ref_mhz') or b.get('U_ref_mhz')
+            print(f"rescaled band : calibrated at {ref_f} MHz -> "
+                  f"{self.observation.nuc_mhz:.4f} MHz")
+            for k, (o, n, unit) in self._rescaled.items():
+                print(f"                {k:<9s} {o:>8.4g} -> {n:>8.4g} {unit}")
+        print(f"gridding      : Umax = {g.Umax:g}, FWHM = {g.FWHM:.4g} deg, f = {g.f}, "
               f"nstokes = {g.nstokes}, flag = {g.flag}")
-        print(f"binning       : Nbin = {b.Nbin}, |U| = {b.binUmin}-{b.binUmax}, "
+        print(f"binning       : Nbin = {b.Nbin}, |U| = {b.binUmin:g}-{b.binUmax:g}, "
               f"Mg_min = {b.Mg_min}")
         if s.enabled:
             print(f"scf           : SM = {s.SM_mhz} MHz, window = {s.window}, "

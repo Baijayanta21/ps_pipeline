@@ -54,6 +54,46 @@ from scipy.linalg import block_diag
 from astropy.cosmology import Planck18,FlatLambdaCDM  # defines cosmological parameters, find comvoing distance
 from datetime import datetime
 
+#: Rest frequency of the 21-cm line, MHz.
+NU_EMIT = 1420.0
+
+
+def geometry(nuc, model='Planck18'):
+    r"""Redshift and comoving geometry at a centre frequency.
+
+    Split out of :func:`build_essential` so that anything needing the line-of-sight
+    scaling — notably :mod:`myutils.masking`, which rescales published :math:`k`
+    limits to whatever band is being processed — uses the *same* relations as the
+    estimator rather than a second copy that can drift.
+
+    Parameters
+    ----------
+    nuc : float
+        Centre frequency in MHz.
+    model : {'Planck18', 'FlatLambdaCDM'}
+
+    Returns
+    -------
+    z : float
+        :math:`z = \nu_e/\nu_c - 1`.
+    r : float
+        Comoving distance to *z*, Mpc.
+    rp : float
+        :math:`r' = \mathrm{d}r/\mathrm{d}\nu` at :math:`\nu_c`, Mpc/MHz.
+    """
+    z = NU_EMIT / nuc - 1.0
+    if model == "FlatLambdaCDM":
+        cosmo = FlatLambdaCDM(H0=67.66, Om0=0.30966, Ob0=0.04897)
+    elif model == "Planck18":
+        cosmo = Planck18
+    else:
+        raise ValueError(f"unknown cosmology {model!r}; "
+                         f"expected 'Planck18' or 'FlatLambdaCDM'")
+    r = cosmo.comoving_distance(z).value
+    rp = cosmo.hubble_distance.value * cosmo.inv_efunc(z) * (1 + z) ** 2 / NU_EMIT
+    return z, r, rp
+
+
 def build_essential(nuc, dnuc, NE, lval, model = 'Planck18'):
     r"""
     For a given set of values :math:`\nu_c,\Delta\nu_c,N_E,\ell` and appropriate cosmological model either **Planck18** or **FlatLambdaCDM**, it calculates  comoving distance :math:`r` at :math:`\nu_c` and it's frequency derivative :math:`r^\prime`. It also calculates the slope of wedge boundary line, corresponding volume factor, and components of :math:`\vec{\mathbf{k}}`: :math:`k_{\perp}\,\text{and}\,k_{\parallel}` respectively.
@@ -188,28 +228,11 @@ def build_essential(nuc, dnuc, NE, lval, model = 'Planck18'):
         \clearpage
     """    
    
-    nue = 1420.0        # nue = emitted frequency 1420 MHz, 21cm radiation
-    z   = nue/nuc -1    # z   = redshift corresponding to observing frequency nuc
-    
+    z, r, rp = geometry(nuc, model)
+
     print(f"--------------------------------------")
-    
-    if model == "FlatLambdaCDM":
-        
-        print(f"Cosmological Model: FlatLambdaCDM")
-        cosmo = FlatLambdaCDM(H0 = 67.66 , Om0 = 0.30966, Ob0 = 0.04897) 
-        # construct the FLAT LCDM Model with no curvature, no density parameter contribution from CMB, Neutrinos
-        # only matter + dark energy 
-    
-        r   = cosmo.comoving_distance(z).value # comoving distance in Mpc unit at redshift z
-        rp  = ((cosmo.hubble_distance.value)*(cosmo.inv_efunc(z)))*((1+z)**2)/nue 
-        
-    elif model == "Planck18":
-        
-        print(f"Cosmological Model: Planck18")
-        r   = Planck18.comoving_distance(z).value # comoving distance in Mpc unit at redshift z
-        rp  = ((Planck18.hubble_distance.value)*(Planck18.inv_efunc(z)))*((1+z)**2)/nue
-        
-        
+    print(f"Cosmological Model: {model}")
+
     # rp = rprime = dr/dnu at nuc = (1+z)^2/nu_e times C/H(z)
 
     # cosmo.hubble_distance.value gives C/H_0 and cosmo.inv_efunc(z) gives 1/E(z) where H(z) = H_0 E(z)

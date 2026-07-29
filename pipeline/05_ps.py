@@ -15,7 +15,7 @@ import myutils.masking as msk
 import myutils.psfuncs.psestimation as pe
 
 
-def build_flag_mask(cfg, kper, kpara, fac):
+def build_flag_mask(cfg, kper, kpara, fac, geom=None):
     """Resolve the mode selection: cached file, or built from the config."""
     ps = cfg.power_spectrum
     path = ps.flag_mask
@@ -30,23 +30,33 @@ def build_flag_mask(cfg, kper, kpara, fac):
         return fm
 
     spec = dict(ps.get('mask') or {})
+    preset = spec.get('preset')
     if not spec:
         # no mask section -> the tutorials' tabulated windows, as before
         spec = {'use_tabulated': True,
                 'kpara_ranges': ps.get('kpara_ranges'),
                 'kpara_start_index': ps.get('kpara_start_index')}
-    else:
+    elif preset is None:
+        # Only fall back to the config's static bands when no preset is in play.
+        # A preset carries its own, already rescaled to this band — filling them in
+        # here would overwrite the scaling with the paper's 154.2 MHz numbers.
         spec.setdefault('kpara_ranges', ps.get('kpara_ranges'))
         spec.setdefault('kpara_start_index', ps.get('kpara_start_index'))
 
-    # Expand any preset before reporting, so what is printed is what is applied
-    # rather than what was typed.
-    preset = spec.get('preset')
-    spec = msk.resolve_spec(spec)
+    # Expand before reporting, so what is printed is what is applied rather than
+    # what was typed — including the rescaling to this run's band.
+    spec = msk.resolve_spec(spec, geom, ps.get('cosmology') or 'Planck18')
 
-    mask, parts = msk.build_mask(kper, kpara, fac, spec)
+    mask, parts = msk.build_mask(kper, kpara, fac, spec, geom,
+                                 ps.get('cosmology') or 'Planck18')
     print("mode mask   : built from config"
           f"{f' (preset: {preset})' if preset else ''}")
+    if preset and geom:
+        ref = msk.PAPER_REF['nuc_mhz']
+        if abs(geom['nuc_mhz'] - ref) > 0.5:
+            print(f"  rescaled      : published limits calibrated at "
+                  f"{ref} MHz -> this run at {geom['nuc_mhz']:.3f} MHz "
+                  f"(SM = {geom['SM_mhz']:g} MHz)")
     buf = spec.get('wedge_buffer') or 0.0
     print(f"  wedge (always): excluding k_par <= {fac:.3f} * k_perp"
           f"{f' + {buf}' if buf else ''}")
@@ -139,7 +149,10 @@ def main():
     print(f"\nnoise scale : × {ps.noise_scale:.4f}  "
           f"(n_nights = {ps.n_nights})", flush=True)
 
-    fm = build_flag_mask(cfg, kper, kpara, fac)
+    geom = dict(r=r, rprime=rp, fac=fac,
+                nuc_mhz=float(cfg.observation.nuc_mhz),
+                SM_mhz=float(cfg.scf.SM_mhz))
+    fm = build_flag_mask(cfg, kper, kpara, fac, geom)
 
     X, mu, sigma = pe.X(pk, dpkn, fm)
     print(f"X statistic : {X.size} modes, mu = {mu:.4f}, sigma = {sigma:.4f}")

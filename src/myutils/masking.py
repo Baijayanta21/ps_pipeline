@@ -41,7 +41,8 @@ import numpy as np
 
 __all__ = ['wedge_mask', 'range_mask', 'tabulated_mask', 'build_mask',
            'describe', 'recompute', 'exclude_boxes', 'for_run',
-           'PAPER', 'PRESETS', 'resolve_spec']
+           'PAPER', 'PAPER_REF', 'PRESETS', 'resolve_spec',
+           'scale_paper', 'geometry_for', 'geom_of']
 
 
 # ------------------------------------------------------------------- presets
@@ -81,6 +82,75 @@ PAPER = dict(
     kpara_start_index=[0, 0, 1, 2, 2, 2],
 )
 
+#: The observing setup :data:`PAPER` was calibrated at — TTGE III's own band.
+#: ``rprime``/``r``/``fac`` are not stored: they are recomputed from ``nuc_mhz``
+#: through :func:`myutils.psfuncs.psestimation.geometry`, so the reference and the
+#: run are always placed with the *same* cosmology.
+PAPER_REF = dict(nuc_mhz=154.2, SM_mhz=2.0)
+
+
+def geometry_for(nuc_mhz, SM_mhz, cosmology='Planck18'):
+    """``(r, rprime, fac, SM_mhz)`` for a band — the inputs :func:`scale_paper` needs."""
+    from myutils.psfuncs.psestimation import geometry
+    _, r, rp = geometry(float(nuc_mhz), cosmology)
+    return dict(r=r, rprime=rp, fac=r / (rp * float(nuc_mhz)),
+                SM_mhz=float(SM_mhz), nuc_mhz=float(nuc_mhz))
+
+
+def scale_paper(geom, cosmology='Planck18'):
+    r"""Rescale the published selection from TTGE III's band to another one.
+
+    The numbers in :data:`PAPER` are absolute :math:`k` values valid only near
+    :math:`\nu_c = 154.2` MHz. Applying them unchanged to a different band is silent
+    and wrong — nothing errors, the mask simply selects modes it should not. Each
+    limit is therefore rescaled by the physics that set it:
+
+    * **Every** :math:`k_\parallel` **value** — ``kpara_max`` and the tabulated band
+      edges — marks a fixed *frequency* (delay) scale, and :math:`k_\parallel \propto
+      1/r'`, so they scale by :math:`r'_{\rm ref}/r'`. The contaminated streaks sit
+      at a fixed instrumental delay, so their bands move the same way.
+    * ``kpara_min`` **additionally scales with the smoothing scale**, :math:`\propto
+      1/(r'\,\mathrm{SM})`, because it is the floor below which SCF removes power.
+      Change ``scf.SM_mhz`` and this floor moves with it.
+    * ``kperp_min`` tracks the shortest baseline. With ``binUmin`` scaled as
+      :math:`\nu` (so the same physical baselines are used), :math:`k_\perp = \ell/r
+      \propto \nu/r`.
+    * ``kperp_max`` is *derived*, not scaled: the paper picks it so the wedge
+      boundary stays near the SCF floor, i.e. ``kperp_max ~ C * kpara_min / fac``.
+      ``C`` is taken from the paper's own choice and reproduces 0.045 exactly at its
+      band. A shallower wedge at higher frequency therefore buys longer baselines.
+
+    Parameters
+    ----------
+    geom : mapping
+        ``r``, ``rprime``, ``fac``, ``SM_mhz``, ``nuc_mhz`` for the run — build it
+        with :func:`geometry_for`, or read it off a loaded ``ps_*.npz``.
+
+    Returns
+    -------
+    dict
+        A spec in the same shape as :data:`PAPER`, with every limit rescaled.
+    """
+    ref = geometry_for(PAPER_REF['nuc_mhz'], PAPER_REF['SM_mhz'], cosmology)
+
+    kpar = ref['rprime'] / float(geom['rprime'])                 # k_para  ~ 1/r'
+    smf = ref['SM_mhz'] / float(geom.get('SM_mhz') or ref['SM_mhz'])
+    kper = (float(geom['nuc_mhz']) / ref['nuc_mhz']) * (ref['r'] / float(geom['r']))
+
+    kpara_min = PAPER['kpara_min'] * kpar * smf
+    # the paper's own k_perp ceiling as a multiple of (kpara_min / fac)
+    C = PAPER['kperp_max'] * ref['fac'] / PAPER['kpara_min']
+
+    spec = dict(PAPER)
+    spec.update(
+        kpara_min=kpara_min,
+        kpara_max=PAPER['kpara_max'] * kpar,
+        kperp_min=PAPER['kperp_min'] * kper,
+        kperp_max=C * kpara_min / float(geom['fac']),
+        kpara_ranges=[v * kpar for v in PAPER['kpara_ranges']],
+    )
+    return spec
+
 #: Named specs usable as ``mask: {preset: paper}`` in the config, or as the
 #: ``spec`` argument anywhere a dict is accepted. Every one of them excludes the
 #: wedge — that is not a property of the preset, it is unconditional.
@@ -97,9 +167,17 @@ PRESETS = {
 #: longer possible now that the wedge is mandatory.
 PRESETS['none'] = PRESETS['wedge_only']
 
+#: Presets whose numbers are tied to the paper's band and must be rescaled when a
+#: run geometry is supplied. ``wedge_only`` has no absolute limits, so it is exempt.
+_SCALABLE = frozenset({'paper', 'paper_box'})
 
-def resolve_spec(spec):
+
+def resolve_spec(spec, geom=None, cosmology='Planck18'):
     """Expand a preset name, or a dict carrying ``preset:``, into a plain spec.
+
+    When *geom* is given, the ``paper`` presets are rescaled to that band via
+    :func:`scale_paper`. Without it they keep their published values, which are only
+    correct near nu_c = 154.2 MHz.
 
     ``spec`` may be ``None``, a preset name, or a dict. Keys given alongside
     ``preset`` override the preset, so ``{'preset': 'paper', 'wedge_buffer': 0.05}``
@@ -116,10 +194,15 @@ def resolve_spec(spec):
         return {}
     if isinstance(spec, str):
         try:
-            return dict(PRESETS[spec])
+            base = dict(PRESETS[spec])
         except KeyError:
             raise KeyError(f"unknown mask preset {spec!r}. "
                            f"Available: {', '.join(sorted(PRESETS))}") from None
+        if geom is not None and spec in _SCALABLE:
+            base = scale_paper(geom, cosmology)
+            if spec == 'paper_box':
+                base['use_tabulated'] = False
+        return base
     spec = dict(spec)
 
     # use_wedge was a switch before the wedge became mandatory.
@@ -135,7 +218,7 @@ def resolve_spec(spec):
     name = spec.pop('preset', None)
     if name is None:
         return spec
-    base = resolve_spec(name)
+    base = resolve_spec(name, geom, cosmology)
     base.update({k: v for k, v in spec.items() if v is not None})
     return base
 
@@ -196,7 +279,7 @@ def tabulated_mask(kper, kpara, ranges, start_index):
     return m
 
 
-def build_mask(kper, kpara, fac, spec=None):
+def build_mask(kper, kpara, fac, spec=None, geom=None, cosmology='Planck18'):
     r"""Combine the active constraints into one selection.
 
     ``spec`` is the ``power_spectrum.mask`` config section::
@@ -221,7 +304,7 @@ def build_mask(kper, kpara, fac, spec=None):
     parts : dict
         Per-constraint survivor counts, for reporting.
     """
-    spec = resolve_spec(spec)
+    spec = resolve_spec(spec, geom, cosmology)
     parts = {'total': len(kper) * len(kpara)}
 
     # The wedge is mandatory. Only the buffer is tunable.
@@ -342,7 +425,26 @@ def exclude_boxes(kper, kpara, boxes):
     return keep
 
 
-def for_run(d, spec=None, boxes=()):
+def geom_of(d, SM_mhz=None):
+    r"""Read the run geometry off a loaded ``ps_*.npz``.
+
+    Stage 5 stores ``r``, ``rp``, ``fac`` and ``nuc_mhz``, so a saved run carries
+    everything :func:`scale_paper` needs. Returns ``None`` if the file predates that
+    — callers then fall back to the unscaled published numbers.
+
+    ``SM_mhz`` is not stored in the product, so pass it when the run used a smoothing
+    scale other than the paper's 2 MHz; otherwise the floor is scaled for band only.
+    """
+    keys = getattr(d, 'files', None) or getattr(d, 'keys', lambda: [])()
+    if not {'r', 'rp', 'fac', 'nuc_mhz'} <= set(keys):
+        return None
+    return dict(r=float(d['r']), rprime=float(d['rp']), fac=float(d['fac']),
+                nuc_mhz=float(d['nuc_mhz']),
+                SM_mhz=float(SM_mhz) if SM_mhz else PAPER_REF['SM_mhz'])
+
+
+def for_run(d, spec=None, boxes=(), geom=None, SM_mhz=None,
+            cosmology='Planck18'):
     r"""Build a mask for one loaded run from a shared specification.
 
     Masks are **per grid**: two runs with different ``NE`` have different
@@ -353,18 +455,29 @@ def for_run(d, spec=None, boxes=()):
     Parameters
     ----------
     d : mapping
-        A loaded ``ps_*.npz``; supplies ``kper``, ``kpara`` and ``fac``.
+        A loaded ``ps_*.npz``; supplies ``kper``, ``kpara``, ``fac`` and — when
+        present — the geometry used to rescale a preset to this run's band.
     spec : dict, optional
         As :func:`build_mask` — ``use_wedge``, ``wedge_buffer``, ``kpara_min`` etc.
     boxes : sequence, optional
         ``(kperp_lo, kperp_hi, kpara_lo, kpara_hi)`` regions to exclude.
+    geom : mapping, optional
+        Override the geometry taken from *d*.
+    SM_mhz : float, optional
+        The run's SCF smoothing scale, which the product does not record. Give it
+        when it differs from the paper's 2 MHz, since the ``kpara_min`` floor scales
+        as ``1/(r' * SM)``.
 
     Returns
     -------
     mask, parts
     """
     kper, kpara, fac = d['kper'], d['kpara'], float(d['fac'])
-    mask, parts = build_mask(kper, kpara, fac, spec)
+    # Default to the run's own geometry so a preset is rescaled to whatever band
+    # this product came from, rather than silently keeping the paper's band.
+    if geom is None:
+        geom = geom_of(d, SM_mhz)
+    mask, parts = build_mask(kper, kpara, fac, spec, geom, cosmology)
     if boxes:
         before = int(mask.sum())
         mask = mask & exclude_boxes(kper, kpara, boxes)

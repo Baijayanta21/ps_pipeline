@@ -17,16 +17,49 @@ observations – III. Improved upper limits at z = 8.2 from multiple pointings"*
 MNRAS 000, 1–17 (2026), [arXiv:2604.24144](https://arxiv.org/abs/2604.24144), in
 `Documentation/`.
 
-It transfers to this pipeline directly, because the setup matches on every number
-the selection depends on:
+### It is rescaled to your band automatically
+
+The published numbers are absolute $k$ values, valid only near $\nu_c = 154.2$ MHz.
+**They are not used literally.** `myutils.masking.scale_paper` moves every limit to
+whatever band the header reports, so the same config works for an LF and an HF
+observation and the two remain comparable. Each limit moves by the physics that set
+it:
+
+| limit | scales as | why |
+|---|---|---|
+| `kpara_max`, the tabulated band edges | $1/r'$ | fixed delay scale; the streaks sit at a fixed instrumental delay |
+| `kpara_min` | $1/(r'\,\mathrm{SM})$ | it is the SCF floor, so it also moves with `scf.SM_mhz` |
+| `kperp_min` | $\nu/r$ | tracks the shortest baseline, with `binUmin` scaled as $\nu$ |
+| `kperp_max` | *derived* | chosen so the wedge boundary stays near the floor: $\approx C\,k_{\parallel,\min}/\mathrm{fac}$ |
+
+`kperp_max` is derived rather than scaled because that is the paper's own reasoning —
+$C$ comes from its choice and reproduces 0.045 exactly at its band. A shallower wedge
+at higher frequency therefore buys you longer baselines.
+
+Worked example, same config at two bands:
+
+| | 154.2 MHz (paper) | 182.4 MHz |
+|---|---|---|
+| $z$ | 8.21 | 6.78 |
+| $r'$ | 16.930 | 15.557 |
+| `fac` | 3.519 | 3.078 |
+| `kpara_min` | 0.1350 | **0.1469** |
+| `kpara_max` | 1.3990 | **1.5227** |
+| `kperp_min` | 0.0070 | **0.0087** |
+| `kperp_max` | 0.0450 | **0.0560** |
+
+Doubling `scf.SM_mhz` to 4 halves the floor to 0.0675, as it should.
+
+Stage 5 prints a `rescaled` line whenever the run's band differs from the reference,
+so the log always records which numbers were actually applied.
+
+The rest of the paper's setup matches this pipeline as-is:
 
 | | paper | this config |
 |---|---|---|
-| centre frequency | 154.2 MHz | 154.2550 MHz |
 | channel width | 40 kHz | 40 kHz |
 | SCF smoothing | $N = 50$, 2 MHz | `scf.SM_mhz: 2.0` → `NW = 50` |
-| $k_\perp$ grid | 0.007–0.146, 20 bins | 0.0078–0.1466, `binning.Nbin: 20` |
-| $k_\parallel$ max | 4.623 Mpc⁻¹ | 4.6390 Mpc⁻¹ |
+| $k_\perp$ grid | 0.007–0.146, 20 bins | `binning.Nbin: 20` |
 | declination | −26.7° | −26.7° |
 
 ### The three cuts
@@ -207,3 +240,62 @@ evidence of a problem with the run.
 
 The external limits are transcribed from TTGE III's own discussion of its Figure 9,
 not from the original papers. Cite the originals before publishing.
+
+---
+
+## 4. Running more than one band from one config
+
+Nothing in the pipeline is pinned to a frequency. Point `paths.input_uvfits` at a
+different observation and every frequency-dependent quantity follows:
+
+**Derived from the header, always** — $\nu_c$, $\Delta\nu_c$, `nchan` come from
+`CRVAL4/CDELT4/NAXIS4`; then $z = 1420/\nu_c - 1$, $r$, $r'$, the wedge slope `fac`,
+the volume factor, and the $k_\perp$/$k_\parallel$ grids. Baselines are converted with
+the file's own channel-0 frequency, so $|U|$ in wavelengths is right by construction.
+
+**Rescaled from a reference band** — three settings are properties of the instrument
+*at a frequency* rather than of the array, so each carries the frequency it was
+calibrated at:
+
+```yaml
+gridding:
+  FWHM: 23
+  FWHM_ref_mhz: 154.255    # beam ~ lambda      -> 19.45 deg at 182.4 MHz
+binning:
+  binUmin: 6.0
+  binUmax: 220
+  U_ref_mhz: 154.255       # |U| ~ nu           -> 7.10 - 260.2 lambda at 182.4 MHz
+```
+
+`U_ref_mhz` governs `gridding.Umax` too. Scaling $|U|$ keeps the same **antennas** in
+play across bands, which is what makes two runs comparable — an unscaled limit would
+silently select different baselines. Set either key to `null` to opt out and take the
+numbers literally.
+
+`simulation.nside` is raised automatically when the simulated sky can no longer reach
+`binUmax` (it must satisfy $|U|_{\max} = (3\,\mathrm{nside}-1)/2\pi \ge$ `binUmax`),
+rounded up to the next power of two. Cost goes as $\mathrm{nside}^2$, so the raise is
+announced loudly; set `simulation.nside_auto: false` to keep the old value and lose
+the outer bins instead.
+
+Every rescaling is echoed at the top of each stage:
+
+```
+rescaled band : calibrated at 154.255 MHz -> 182.4150 MHz
+                FWHM            23 ->    19.45 deg
+                Umax           250 ->    295.6 lambda
+                binUmin          6 ->    7.095 lambda
+                binUmax        220 ->    260.2 lambda
+```
+
+At the reference frequency itself nothing is rescaled and no line is printed, so an
+LF run is bit-identical to before this was added.
+
+### What is still *not* band-generic
+
+`plots.reference` is left alone deliberately. The published limits are at $z \approx
+8.2$; overlaying them on a $z = 6.8$ spectrum compares different epochs. Drop the key
+for a run in another band, or keep it and label the figure yourself.
+
+`power_spectrum.noise_scale` is unrelated to frequency but is still inherited from the
+tutorials rather than derived from your integration time — see `docs/PIPELINE.md`.
