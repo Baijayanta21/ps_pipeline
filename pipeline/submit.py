@@ -246,10 +246,22 @@ def render(cfg, stage, script_dir, log_dir, array=None, extra_args=''):
     # without it each job truncates the file and only the last one survives. stderr is
     # merged into the same file so the ordering of errors relative to progress is
     # preserved. Set slurm.log_mode: per_job for the old one-file-per-job behaviour.
+    #
+    # ARRAY JOBS NEVER SHARE THE FILE. Concurrent --open-mode=append from many nodes
+    # onto a shared filesystem does not work: most tasks fail to open it and exit 1
+    # within seconds, before any imports, and the writes that do land overwrite each
+    # other. Observed with a 20-task noise array on cephfs — tasks 4-14 and 17 died in
+    # ~3 s while 0-3 ran for 20 minutes, and the shared log kept nothing past stage 2.
+    # An `afterok` chain then stalls forever with DependencyNeverSatisfied.
+    #
+    # So in universal mode the sequential stages still share one file, and array tasks
+    # get one file each — named to sort next to it.
     universal = (s.get('log_mode') or 'universal') == 'universal'
-    if universal:
+    if universal and not array:
         lines += [f'#SBATCH --output={log_dir}/pipeline_{cfg.index}.log',
                   '#SBATCH --open-mode=append']
+    elif universal:
+        lines += [f'#SBATCH --output={log_dir}/pipeline_{cfg.index}_{job}_%a.log']
     elif array:
         lines += [f'#SBATCH --output={log_dir}/{job}_%A_%a.out',
                   f'#SBATCH --error={log_dir}/{job}_%A_%a.err']
