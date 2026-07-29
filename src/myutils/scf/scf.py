@@ -203,15 +203,21 @@ def doscf(GV, SM, window = 'hann', method = 'auto'):
     NormI[GV.imag==0.0] = 0.0
 
     
-    NR = convolve(NormR, win_expand, method = method, mode = 'valid')  
-    NI = convolve(NormR, win_expand, method = method, mode = 'valid')  
+    NR = convolve(NormR, win_expand, method = method, mode = 'valid')
+    NI = convolve(NormI, win_expand, method = method, mode = 'valid')
     
-    GV_SCF.real/=NR# normalized that incorporates flagging
-    GV_SCF.imag/=NI# normalized that incorporates flagging
+    # Where an entire smoothing window is flagged, NR/NI are zero and the division
+    # yields nan. Those entries are overwritten with 0.0 immediately below, so the
+    # result is correct — suppress the warning rather than let it flood the log
+    # (on a 457x457 grid most points are empty and would warn on every call).
+    with np.errstate(divide = 'ignore', invalid = 'ignore'):
+        GV_SCF.real/=NR# normalized that incorporates flagging
+        GV_SCF.imag/=NI# normalized that incorporates flagging
 
     # put the value to zero to those modes which are flagged in the data
-    (GV_SCF.real)[NormR[NW:-NW]==0.0] = 0.0
-    (GV_SCF.imag)[NormI[NW:-NW]==0.0] = 0.0
+    # slice the frequency axis (the last one), not axis 0
+    (GV_SCF.real)[NormR[...,NW:-NW]==0.0] = 0.0
+    (GV_SCF.imag)[NormI[...,NW:-NW]==0.0] = 0.0
 
 
     # filtered convolved gridded visibility

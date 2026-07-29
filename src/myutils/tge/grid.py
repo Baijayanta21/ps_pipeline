@@ -47,6 +47,51 @@ from astropy.io import fits
 import time
 from datetime import datetime
 
+try:
+    from numba import njit, prange
+    _HAVE_NUMBA = True
+except ImportError:                                    # pragma: no cover
+    _HAVE_NUMBA = False
+
+
+if _HAVE_NUMBA:
+
+    @njit(parallel = True, cache = True, nogil = True)
+    def _accumulate(GV, ip, wt, vis, nx, ny, nxc, nyc, Nm):
+        r"""Add one baseline's contribution, and its conjugate, into the grid.
+
+        This replaces
+
+        .. code-block:: python
+
+            subgrid  = np.multiply.outer(wt, vis)
+            csubgrid = np.conjugate(subgrid[::-1, ::-1])
+            GV[ip, nx-Nm:nx+Nm+1, ny-Nm:ny+Nm+1] += subgrid
+            GV[ip, nxc-Nm:nxc+Nm+1, nyc-Nm:nyc+Nm+1] += csubgrid
+
+        which allocates two (2Nm+1, 2Nm+1, nc) complex arrays per baseline per
+        polarisation — about 2.1 MB each at MWA sizes, so hundreds of GB of allocation
+        traffic over a full pass. Here nothing is allocated at all.
+
+        The loop is parallel over **frequency**: thread k touches only ``GV[..., k]``,
+        so the two writes below can never race, and no per-thread copy of the 5 GB grid
+        is needed. Splitting over baselines instead would race on overlapping grid
+        cells.
+
+        ``wt`` is real, so ``conj(wt * v) == wt * conj(v)``, and the reversed indexing
+        of the original ``subgrid[::-1, ::-1]`` becomes ``wt[n-1-a, n-1-b]``.
+        """
+        n = wt.shape[0]
+        nc = vis.shape[0]
+        for k in prange(nc):
+            v = vis[k]
+            vc = np.conj(v)
+            for a in range(n):
+                ra = n - 1 - a
+                for b in range(n):
+                    GV[ip, nx  - Nm + a, ny  - Nm + b, k] += wt[a, b] * v
+                    GV[ip, nxc - Nm + a, nyc - Nm + b, k] += wt[ra, n - 1 - b] * vc
+
 def mkbin(GV, dU, Umax, FWHM, f, binUmax, binUmin, Nbin, Mg_min, outf):
     r"""
     Given a **UAPS convolved gridded visibility array** and suitable gridding parameters it identfies the grid points which are relevant and which grid points are in which bin.
@@ -213,7 +258,8 @@ def mkbin(GV, dU, Umax, FWHM, f, binUmax, binUmin, Nbin, Mg_min, outf):
     print(f"Saved: {outf}.npz")
 
 
-def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
+def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None,
+         progress = True, memmap = False, engine = 'numpy'):
     r"""
     This tapers the sky response and grids the :math:`uv` plane and computes convolved visibilities, given a fits file.
 
@@ -248,6 +294,16 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
         The int or the list elements must be within the range of polarizations in the original fits file.
     seed : int or None
         Default set None, seed value for noise only simulations.
+    progress : bool
+        If True (default) and more than 5000 baselines survive the :math:`|U|_{max}` cut,
+        print a progress line roughly every 5% of the baseline loop with elapsed time and
+        an ETA. Set False to restore the original silent behaviour.
+    memmap : bool
+        Passed to :func:`astropy.io.fits.open`. Default **False**, which reads the data
+        unit once sequentially instead of page-faulting across the file to gather the
+        interleaved group parameters — much faster on a network filesystem, at the cost
+        of holding the data unit in memory. Set True for the previous lazy behaviour if
+        memory is tight.
 
     Returns
     --------
@@ -308,7 +364,18 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
     
 
     # open fits file and make a hdul object
-    hdul = fits.open(infile, mode = 'readonly')
+    #
+    # memmap = False is deliberate. With memmap = True (astropy's default) the group
+    # parameters UU/VV are fetched lazily, and because random-groups format interleaves
+    # them with each group's visibilities, pulling one column page-faults across the
+    # whole file in tens of thousands of scattered reads. On cephfs that costs minutes.
+    # memmap = False reads the data unit once, sequentially, at full streaming
+    # bandwidth; every column access afterwards is in memory.
+    #
+    # The cost is holding the data unit in RAM (~2.7 GB for a 768-channel MWA file),
+    # which is far below the per-stage allocation, and grid() needs the visibilities
+    # anyway.
+    hdul = fits.open(infile, mode = 'readonly', memmap = memmap)
 
     # Convert nstokes and nrel to lists (if not) 
 
@@ -335,19 +402,46 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
     Ng = int(np.ceil(Umax/dU) + Nm)              # Padding for convolution. Extra Nm grid pts to avoid edge effect.
     Nu = 2*Ng +1                                 # Total grid pts (Nu)
 
-    st = nstokes    
-
     # Extract The baselines
+    #
+    # NOTE in UVFITS random-groups format the group parameters (UU, VV, ...) are
+    # interleaved with each group's visibility data, so pulling out this one column is a
+    # STRIDED read across the whole file — several GB for a real MWA observation, and on
+    # a slow shared filesystem this single line can dominate the entire call.
+    if progress:
+        print(f"Baselin.: reading UU/VV (strided read over the whole file) ...",
+              flush = True)
+        _bl_start = datetime.now()
+
     uuu = np.copy(hdul[0].data['UU'])*nu_chan0   # u values
     vvv = np.copy(hdul[0].data['VV'])*nu_chan0   # v values
     nbln= len(uuu)                               # no of baselines
+
+    if progress:
+        print(f"Baselin.: {nbln:,} read in "
+              f"{(datetime.now() - _bl_start).total_seconds():.1f}s", flush = True)
 
     
     bluv = np.stack((uuu,vvv),axis=1)            # Make 2D array Nbl × 2
 
     # visibility data from hdulist
+    #
+    # NOTE this pulls in ALL channels regardless of n1/n2, so it is a full read of the
+    # visibility array — several GB for a real MWA file, and the slowest single step in
+    # this function on a cold filesystem cache. Announce it, otherwise the function looks
+    # hung between the banner above and the baseline loop below.
+    if progress:
+        nch_file = hdul[0].data['DATA'].shape[4]
+        gb = nbln * nch_file * hdul[0].data['DATA'].shape[5] * 3 * 4 / 1e9
+        print(f"Reading : DATA array, {nbln:,} rows x {nch_file} channels "
+              f"(~{gb:.1f} GB) ...", flush = True)
+        _read_start = datetime.now()
 
     adata = hdul[0].data['DATA'][:,0,0,0,:,:,:]  # nbl times nchannels times nstokes times 3 (real,complex,weight)
+
+    if progress:
+        print(f"Read    : done in "
+              f"{(datetime.now() - _read_start).total_seconds():.1f}s", flush = True)
 
 
     # identify and slice  the baselines less than umax
@@ -387,10 +481,31 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
     #####   done
 
 
-    for ii in index:  # loop over only index values that satisfy norm <= Umax
+    # Progress reporting. The loop below is a Python-level loop over baselines and can
+    # run for many minutes on a real MWA file; without this the function prints its
+    # banner and then goes silent, which is indistinguishable from a hang.
+    nsel = len(index)
+    print(f"Baselin.: {nsel:,} of {nbln:,} within Umax")
 
+    use_numba = (engine == 'numba')
+    if use_numba and not _HAVE_NUMBA:
+        raise RuntimeError("engine='numba' requested but numba is not installed")
+    if progress:
+        print(f"Engine  : {'numba (parallel over channels)' if use_numba else 'numpy'}",
+              flush = True)
+    report = max(1, nsel // 20) if (progress and nsel > 5000) else 0
+    loop_start = datetime.now()
 
-        #  calculate weights    
+    for ib, ii in enumerate(index):  # loop over only index values that satisfy norm <= Umax
+
+        if report and ib and ib % report == 0:
+            frac = ib / nsel
+            secs = (datetime.now() - loop_start).total_seconds()
+            eta = secs * (1.0 - frac) / frac
+            print(f"Gridding: {100 * frac:5.1f}%  ({ib:,}/{nsel:,})  "
+                  f"elapsed {secs:7.1f}s  eta {eta:7.1f}s", flush = True)
+
+        #  calculate weights
 
         diff = c + nuv[ii]*dU-bluv[ii]        # (u,v) difference from each grid pint 
 
@@ -403,9 +518,9 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
         iidata = np.copy(adata[ii,:,:,:])     # copy visibility data for that baseline
 
 
-        for st in nstokes:
-            
-            
+        for ist, st in enumerate(nstokes):
+
+            # st indexes the polarization in the fits file, ist the slot in GV
             data = iidata[:,st,:]             # extract the data for that polarization
 
 
@@ -431,20 +546,22 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
                 vis[data[n1:n2+1,2]<=0] = 0.
 
 
-            subgrid  = np.multiply.outer(wt,vis) # wt[...,None]*vis
-            csubgrid = np.conjugate(subgrid[::-1,::-1]) #np.multiply.outer(wt[::-1,::-1],np.conjugate(vis))
-
             # indices of the nearby grid point for that baseline
-            nx = Ng+(nuv[ii,0]) 
+            nx = Ng+(nuv[ii,0])
             ny = Ng+(nuv[ii,1])
 
-            GV[st,nx-Nm:nx+Nm+1,ny-Nm:ny+Nm+1] += subgrid
+            # ... and for the conjugate baseline
+            nxc = Ng-(nuv[ii,0])
+            nyc = Ng-(nuv[ii,1])
 
-            # indices of the nearby grid point for that conjugate baseline
-            nx = Ng-(nuv[ii,0])
-            ny = Ng-(nuv[ii,1])
+            if use_numba:
+                _accumulate(GV, ist, wt, vis, nx, ny, nxc, nyc, Nm)
+            else:
+                subgrid  = np.multiply.outer(wt,vis) # wt[...,None]*vis
+                csubgrid = np.conjugate(subgrid[::-1,::-1])
 
-            GV[st,nx-Nm:nx+Nm+1,ny-Nm:ny+Nm+1] += csubgrid
+                GV[ist,nx-Nm:nx+Nm+1,ny-Nm:ny+Nm+1]    += subgrid
+                GV[ist,nxc-Nm:nxc+Nm+1,nyc-Nm:nyc+Nm+1] += csubgrid
 
     MM = 2*Nm
     

@@ -642,7 +642,7 @@ def X(pk, dpkn, flag_mask):
     
     X = pk/dpkn # X statistics
     
-    X = X[...,np.bool(flag_mask)]     # extract only the modes that you want
+    X = X[...,flag_mask == 1]         # extract only the modes that you want
     
     mu_est    = np.mean(X, axis = -1)
     sigma_est = np.std (X, axis = -1) # use axis = -1 to vectorize for input pk higher dimensions

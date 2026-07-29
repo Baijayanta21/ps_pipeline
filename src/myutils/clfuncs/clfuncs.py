@@ -1,11 +1,10 @@
 import numpy as np
 import time
 from numba import njit
-import builtins as blt
 from datetime import datetime
 
 @njit
-def correlate_fast(GV, ni, corr):
+def correlate_fast(GV, ni, corr, nc):
     r"""
     Helper function (**numba jit accelerated**) which performs the **Cross TGE** estimator.
     
@@ -17,14 +16,16 @@ def correlate_fast(GV, ni, corr):
         1D array containing the info about which grid point falls into which annular bin. Must contain values in between :math:`0,\textrm{Nbin}-1`. 
     corr : np.ndarray
         3D array of shape (Nbin, NC, NC).
+    nc : int
+        Number of frequency channels in **GV**. Passed explicitly rather than read from a
+        global, because numba freezes globals as compile-time constants.
 
     Returns
     -------
     None
         This function does not return anything.
     """
-    print(f'Channels   : {nc}')
-    for ii in range(ni.size): # loop over the grid point 
+    for ii in range(ni.size): # loop over the grid point
         X  = GV[0,ii]  # v_cg^XX
         Xc = X.conj()  # (v_cg^XX)*
         Y  = GV[1,ii]  # v_cg^YY
@@ -93,11 +94,12 @@ def correlate(GV, ni, Nbin):
     # Cross TGE estimator
     # print(GV.shape) 
     
-    blt.nc = GV.shape[-1]             # no of channels available in gridded visibility GV
-    
+    nc = GV.shape[-1]                 # no of channels available in gridded visibility GV
+    print(f'Channels   : {nc}')
+
     corr   = np.zeros((Nbin, nc, nc)) # create an empty array
 
-    correlate_fast(GV, ni, corr)      # perform correlation 
+    correlate_fast(GV, ni, corr, nc)  # perform correlation
 
     # fill the other half automatically
     for nc1 in range(nc):
