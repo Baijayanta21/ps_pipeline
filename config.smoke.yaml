@@ -1,0 +1,108 @@
+# ============================================================================
+#  SMOKE TEST — exercises all five stages on the real UVFITS in minutes.
+# ----------------------------------------------------------------------------
+#  Same input file as the real run, so headers, baselines, flagging and pointing
+#  are genuine — but a tiny sky resolution, few realisations and a reduced channel
+#  range. The NUMBERS ARE MEANINGLESS. The point is to prove the chain runs and
+#  that every stage hands the next one the shapes it expects.
+#
+#      export PS_CONFIG=$PWD/config.smoke.yaml
+#      python -m myutils.config
+#      python pipeline/01_uaps.py && python pipeline/02_bininfo.py \
+#        && python pipeline/03_data.py && python pipeline/04_noise.py \
+#        && python pipeline/05_ps.py
+#
+#  Once this passes end to end, switch PS_CONFIG back to config.yaml.
+# ============================================================================
+
+paths:
+  input_uvfits: /users/schatterjee/scratch3/project_MWA/hyperdrive_residual-R5_LF_RA39p7/MWA_LF_RA_39p7DEG_GOOD_PTG_HYP-R5.fits
+  output_dir: /users/schatterjee/scratch3/project_MWA/hyperdrive_residual-R5_LF_RA39p7/ps_smoke
+  index: smoke
+  uaps_uvfits: null
+  grf_dir: null
+
+
+observation:
+  nuc_mhz: null
+  dnuc_mhz: null
+  nchan: null
+  n1: 0
+  n2: 199                # 200 channels instead of 768 -> 100 survive SCF
+
+
+gridding:
+  Umax: 50               # small grid: ~(2, 103, 103, 200) ~ 70 MB
+  FWHM: 23
+  f: 0.6
+  nstokes: [0, 1]
+  flag: true
+
+
+binning:
+  Nbin: 8
+  binUmin: 6.0
+  binUmax: 45            # inside Umax, and inside the nside reach below
+  Mg_min: 0.01
+
+
+simulation:
+  # nside must be large enough that the simulated sky reaches binUmax:
+  #     lmax    = 3*nside - 1
+  #     |U|max  = lmax / 2*pi
+  # nside = 128 -> lmax = 383 -> |U| <= 61 lambda, comfortably past binUmax = 45.
+  # nside = 64 would only reach 30 lambda and would starve the outer bins.
+  nside: 128             # 16x fewer pixels than the real run's 512
+  Nrea: 8                # enough realisations to make M_g non-degenerate
+  chunk_size: 100
+  seed: 1
+
+
+scf:
+  enabled: true
+  SM_mhz: 2.0            # NW = 50, so 200 -> 100 channels
+  window: hann
+  method: fft
+  apply_to_uaps: false
+
+
+noise:
+  n_realisations: 3      # only proves the loop and the merge work
+  seed_start: 90000      # deliberately distinct from the real run's seeds
+
+
+clfuncs:
+  keep_2d: true
+
+
+power_spectrum:
+  cosmology: Planck18
+  NBin: 4
+  n_nights: 9
+  noise_scale: null
+  NE: null               # -> 100
+  flag_mask: null
+  # kpara at NE = 100 spans roughly 0 to 4.6 Mpc^-1 in steps of ~0.047,
+  # so the default ranges below are all reachable.
+  kpara_ranges: [0.135, 0.228, 0.36, 0.5, 0.72, 0.8, 0.92, 1.09, 1.17, 1.39]
+  kpara_start_index: [0, 0, 1, 2, 2, 2]
+
+
+slurm:
+  enabled: true
+  account: null
+  partition: Main
+  qos: null
+  setup:
+    - source /idia/users/schatterjee/vnv_ilifu/vnvMWA/bin/activate
+  python: null
+  log_dir: null
+  mail_user: null
+  mail_type: FAIL
+  defaults:
+    time: "00:30:00"
+    mem: 16G
+    cpus_per_task: 4
+  stages:
+    noise:
+      throttle: 3

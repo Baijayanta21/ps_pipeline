@@ -13,7 +13,7 @@ readme = "README.md"
 requires-python = ">=3.7"
 
 dependencies = [
-    "numpy","scipy","astropy","healpy","numba",
+    "numpy","scipy","astropy","healpy","numba","numexpr","pyyaml",
 ]
 
 [tool.setuptools.packages.find]

@@ -1,0 +1,548 @@
+<title>myutils — MWA Power Spectrum Pipeline Flowcharts</title>
+
+<style>
+  :root {
+    --ground:  #F2F5F8;
+    --surface: #FFFFFF;
+    --ink:     #121821;
+    --muted:   #57626F;
+    --faint:   #7C8798;
+    --rule:    #DBE2EA;
+    --amber:   #A66E08;
+    --teal:    #0C6F79;
+    --violet:  #5344BC;
+    --shadow:  0 1px 2px rgba(18, 24, 33, .05), 0 8px 24px -12px rgba(18, 24, 33, .16);
+
+    --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, "Times New Roman", serif;
+    --mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    --measure: 66ch;
+    --wide: 1080px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:  #0D1218;
+      --surface: #151C24;
+      --ink:     #E3E9F0;
+      --muted:   #9AA6B4;
+      --faint:   #7A8695;
+      --rule:    #253039;
+      --amber:   #E0A93A;
+      --teal:    #3FBAC3;
+      --violet:  #A395F5;
+      --shadow:  0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px -14px rgba(0, 0, 0, .55);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:  #0D1218;
+    --surface: #151C24;
+    --ink:     #E3E9F0;
+    --muted:   #9AA6B4;
+    --faint:   #7A8695;
+    --rule:    #253039;
+    --amber:   #E0A93A;
+    --teal:    #3FBAC3;
+    --violet:  #A395F5;
+    --shadow:  0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px -14px rgba(0, 0, 0, .55);
+  }
+
+  :root[data-theme="light"] {
+    --ground:  #F2F5F8;
+    --surface: #FFFFFF;
+    --ink:     #121821;
+    --muted:   #57626F;
+    --faint:   #7C8798;
+    --rule:    #DBE2EA;
+    --amber:   #A66E08;
+    --teal:    #0C6F79;
+    --violet:  #5344BC;
+    --shadow:  0 1px 2px rgba(18, 24, 33, .05), 0 8px 24px -12px rgba(18, 24, 33, .16);
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 20px 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .col { max-width: var(--measure); margin-inline: auto; }
+  .col-wide { max-width: var(--wide); margin-inline: auto; }
+
+  /* ---- masthead ---- */
+  header {
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding: 4.5rem 0 2rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .705rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 1.1rem;
+  }
+  h1 {
+    font-size: clamp(2.1rem, 5vw, 3.1rem);
+    line-height: 1.08;
+    letter-spacing: -.021em;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0 0 1rem;
+  }
+  h1 .mono { font-family: var(--mono); font-size: .78em; font-weight: 500; letter-spacing: -.01em; }
+  .standfirst {
+    font-size: 1.13rem;
+    color: var(--muted);
+    max-width: 56ch;
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  /* ---- legend ---- */
+  .legend {
+    max-width: var(--wide);
+    margin: 2rem auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem 1.6rem;
+    padding: 0;
+    list-style: none;
+    font-family: var(--mono);
+    font-size: .78rem;
+  }
+  .legend li { display: flex; align-items: baseline; gap: .5rem; color: var(--muted); }
+  .swatch {
+    width: .68rem; height: .68rem; flex: none;
+    border-radius: 2px;
+    border: 1.5px solid currentColor;
+    transform: translateY(1px);
+  }
+  .k-data   { color: var(--amber); }
+  .k-uaps   { color: var(--teal); }
+  .k-noise  { color: var(--violet); }
+  .legend b { color: var(--ink); font-family: var(--serif); font-weight: 600; }
+
+  /* ---- sections ---- */
+  section { margin-top: 4rem; }
+  h2 {
+    font-size: 1.62rem;
+    letter-spacing: -.014em;
+    font-weight: 600;
+    margin: 0 0 .5rem;
+    text-wrap: balance;
+    display: flex;
+    align-items: baseline;
+    gap: .72rem;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: .66em;
+    font-weight: 500;
+    color: var(--faint);
+    letter-spacing: .04em;
+    flex: none;
+  }
+  .lede { color: var(--muted); margin: 0 0 1.9rem; }
+  p { margin: 0 0 1.05rem; }
+  .note {
+    border-left: 2px solid var(--amber);
+    padding-left: 1.1rem;
+    margin: 2rem auto 0;
+    color: var(--muted);
+  }
+  .note strong { color: var(--ink); font-weight: 600; }
+  code {
+    font-family: var(--mono);
+    font-size: .855em;
+    background: color-mix(in oklab, var(--ink) 7%, transparent);
+    padding: .11em .36em;
+    border-radius: 3px;
+  }
+
+  /* ---- diagram frame ---- */
+  .figure {
+    margin: 0 auto;
+    max-width: var(--wide);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .figure-body { overflow-x: auto; padding: 1.6rem 1.2rem; }
+  pre.mermaid {
+    margin: 0;
+    text-align: center;
+    min-width: min-content;
+    font-family: var(--mono);
+  }
+  figcaption {
+    font-family: var(--mono);
+    font-size: .735rem;
+    letter-spacing: .02em;
+    color: var(--faint);
+    padding: .78rem 1.2rem;
+    border-top: 1px solid var(--rule);
+    background: color-mix(in oklab, var(--ink) 2.5%, transparent);
+  }
+
+  /* ---- table ---- */
+  .table-wrap { overflow-x: auto; max-width: var(--wide); margin-inline: auto; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: .885rem;
+    font-variant-numeric: tabular-nums;
+  }
+  caption {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: .735rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding-bottom: .8rem;
+  }
+  th, td { text-align: left; padding: .6rem .95rem; border-bottom: 1px solid var(--rule); }
+  th {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--faint);
+    white-space: nowrap;
+  }
+  td:first-child { font-family: var(--mono); color: var(--faint); width: 3.2rem; }
+  td.fn { font-family: var(--mono); font-size: .855em; color: var(--ink); white-space: nowrap; }
+  td.sh { font-family: var(--mono); font-size: .8em; color: var(--muted); }
+  tbody tr:last-child td { border-bottom: none; }
+
+  footer {
+    max-width: var(--wide);
+    margin: 5rem auto 0;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: .77rem;
+    color: var(--faint);
+    line-height: 1.75;
+  }
+
+  a { color: var(--teal); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, :focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; border-radius: 2px; }
+</style>
+
+<header>
+  <p class="eyebrow">Tapered Gridded Estimator · MWA 21-cm pipeline</p>
+  <h1><span class="mono">myutils</span> — code flowcharts</h1>
+  <p class="standfirst">
+    Three views of the same code: the end-to-end pass structure, the simulation call graph,
+    and the power-spectrum estimation chain.
+  </p>
+  <ul class="legend">
+    <li class="k-data"><span class="swatch"></span><b>Data pass</b> — nrel = −1</li>
+    <li class="k-uaps"><span class="swatch"></span><b>UAPS pass</b> — nrel ≥ 0</li>
+    <li class="k-noise"><span class="swatch"></span><b>Noise pass</b> — nrel = −2, × Nreal</li>
+  </ul>
+</header>
+
+<section>
+  <div class="col">
+    <h2><span class="num">01</span> End-to-end — the three passes</h2>
+    <p class="lede">
+      The estimator is a ratio, so the data pass alone is not enough. Three passes run
+      through the same four stages; the UAPS pass additionally produces the binning
+      information all three need, and the noise pass repeats to give a covariance.
+    </p>
+  </div>
+
+  <figure class="figure">
+    <div class="figure-body">
+<pre class="mermaid">
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","lineColor":"#7C8698","primaryColor":"#F1F3F6","primaryTextColor":"#151A21","primaryBorderColor":"#3E4756","clusterBkg":"transparent","clusterBorder":"#B6C0CC"},"flowchart":{"curve":"basis","nodeSpacing":38,"rankSpacing":42}}%%
+flowchart TB
+    RAW[/"UVFITS — real visibilities&lt;br/&gt;1000007200.fits"/]
+
+    SIM["sim_vis()&lt;br/&gt;simvis · skysimtype='2D' · apsfunc=uaps"]
+    UF[/"UAPS UVFITS"/]
+    RAW --&gt; SIM --&gt; UF
+
+    subgraph S1["Stage 1 · tge.grid.grid()"]
+        direction LR
+        GD["nrel = −1&lt;br/&gt;data"]
+        GU["nrel = 0&lt;br/&gt;UAPS"]
+        GN["nrel = −2 · seed&lt;br/&gt;noise × Nreal"]
+    end
+
+    RAW --&gt; GD
+    UF --&gt; GU
+    RAW --&gt; GN
+
+    GVD[/"GV&lt;br/&gt;(2, 457, 457, 768)&lt;br/&gt;complex128 · 5.1 GB"/]
+    GVU[/"GV UAPS"/]
+    GVN[/"GV noise × Nreal"/]
+    GD --&gt; GVD
+    GU --&gt; GVU
+    GN --&gt; GVN
+
+    MK["Stage 2 · mkbin()&lt;br/&gt;annular binning · M_g cutoff"]
+    BIN[/"bin_info.npz&lt;br/&gt;ni · NI · lval · dU"/]
+    GVU --&gt; MK --&gt; BIN
+
+    FD["Stage 3 · doscf()&lt;br/&gt;SM MHz · hann"]
+    FU["Stage 3 · doscf()"]
+    FN["Stage 3 · doscf()"]
+    GVD --&gt; FD
+    GVU --&gt; FU
+    GVN --&gt; FN
+
+    CD["Stage 4 · correlate()&lt;br/&gt;cross-TGE XX×YY"]
+    CU["Stage 4 · correlate()"]
+    CN["Stage 4 · correlate()"]
+    FD -- "768→668 ch" --&gt; CD
+    FU --&gt; CU
+    FN --&gt; CN
+
+    BIN -. "ni, NI≥0 mask" .-&gt; CD
+    BIN -. .-&gt; CU
+    BIN -. .-&gt; CN
+
+    EL[/"el — (Nbin, 668)"/]
+    ML[/"ml — (Nbin, 668)"/]
+    EN[/"en — (Nreal, Nbin, 668)"/]
+    CD --&gt; EL
+    CU --&gt; ML
+    CN --&gt; EN
+
+    RT{{"cl = el / ml"}}
+    RN{{"cln = en / ml"}}
+    EL --&gt; RT
+    ML --&gt; RT
+    ML --&gt; RN
+    EN --&gt; RN
+
+    PS["Stage 5 · psfuncs&lt;br/&gt;see diagram 03"]
+    RT --&gt; PS
+    RN --&gt; PS
+    BIN -. "lval" .-&gt; PS
+
+    OUT[/"Δ²(k) · 2σ(k) · SNR · upper limits"/]
+    PS --&gt; OUT
+
+    classDef d fill:#FCEFD6,stroke:#B0760B,color:#3A2A08
+    classDef u fill:#DBF1F3,stroke:#0E7C86,color:#06333A
+    classDef n fill:#E7E4FA,stroke:#5B4CC4,color:#241C57
+    classDef a fill:#FFFFFF,stroke:#8A94A6,color:#1A1F26
+    classDef m fill:#F1F3F6,stroke:#3E4756,color:#151A21
+
+    class GD,FD,CD d
+    class GU,FU,CU,SIM u
+    class GN,FN,CN n
+    class RAW,UF,GVD,GVU,GVN,BIN,EL,ML,EN,OUT a
+    class MK,RT,RN,PS m
+</pre>
+    </div>
+    <figcaption>Solid edges carry arrays. Dashed edges carry binning metadata and the shared normalisation.</figcaption>
+  </figure>
+
+  <div class="col">
+    <p class="note">
+      <strong>The dashed edges are the coupling that is easy to miss.</strong>
+      <code>bin_info.npz</code> is produced by the UAPS pass but consumed by all three, and
+      <code>ml</code> divides both the data and the noise correlations. Change a gridding
+      parameter and every downstream product must be regenerated together — nothing in the
+      code checks this for you.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+    <h2><span class="num">02</span> Simulation call graph</h2>
+    <p class="lede">
+      Entry point is <code>sim_vis</code>; everything below <code>allskysim</code> branches
+      on <code>skysimtype</code>. Nodes marked ⚠ read parameters out of
+      <code>builtins</code> rather than taking them as arguments, which is why the leaf
+      functions cannot be called standalone.
+    </p>
+  </div>
+
+  <figure class="figure">
+    <div class="figure-body">
+<pre class="mermaid">
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","lineColor":"#7C8698","primaryColor":"#F1F3F6","primaryTextColor":"#151A21","primaryBorderColor":"#3E4756"},"flowchart":{"curve":"basis","nodeSpacing":34,"rankSpacing":40}}%%
+flowchart TB
+    SV["sim_vis(uvinfits, uvoutfits, skysimtype, seed, apsfunc, psfunc)"]
+    SVH["sim_vis_hdul() ⚠&lt;br/&gt;reads CRVAL4/6/7 · NAXIS3/4 · CDELT4&lt;br/&gt;writes builtins: nu_c, nc, dnu"]
+    SV --&gt; SVH
+
+    ASK["allskysim(nside, seed, skysimtype, apsfunc, psfunc) ⚠"]
+    SVH --&gt; ASK
+
+    G2["grf(nside, lmax, apsfunc, seed)&lt;br/&gt;hp.synfast · monopole removed"]
+    S3["sky3dgrf(nside, seed, psfunc) ⚠&lt;br/&gt;needs r, rp, nc, dnu from builtins"]
+    ASK -- "'2D' × Nrea" --&gt; G2
+    ASK -- "'3D'" --&gt; S3
+
+    CACHE[/"./grf/grf_{nside}_{seed}.npy"/]
+    S3 --&gt; CACHE
+    CACHE -. "reused on next run" .-&gt; SVH
+
+    MAP[/"map_grf&lt;br/&gt;(Nrea or Nc, 12·nside²) mK"/]
+    G2 --&gt; MAP
+    S3 --&gt; MAP
+
+    VIS["visgen_mwa_multi(nside, grfmap, ra, dec, bl, nu) ⚠&lt;br/&gt;chunked over baselines"]
+    MAP --&gt; VIS
+    SVH --&gt; VIS
+
+    PB["pbgen(nside, ra, dec, nu, pbfunction)"]
+    BM["beammwa(nu, ne1, ne2)&lt;br/&gt;sinc² × sinc² · b = 4 m"]
+    DOT["dot_cal_superfast(nside, ra, dec, ipix)"]
+    HN["hat_n(nside, ipix)"]
+    PH["calculate_phase(dot_product, bl)&lt;br/&gt;numexpr: exp(2πi U·Δn)"]
+
+    VIS --&gt; PB --&gt; BM
+    PB --&gt; HN
+    VIS --&gt; DOT --&gt; HN
+    VIS --&gt; PH
+
+    OUTF[/"UVFITS — simulated visibilities (Jy)&lt;br/&gt;same vis written to every polarisation"/]
+    VIS --&gt; SVH
+    SVH --&gt; OUTF
+
+    classDef e fill:#DBF1F3,stroke:#0E7C86,color:#06333A
+    classDef f fill:#F1F3F6,stroke:#3E4756,color:#151A21
+    classDef a fill:#FFFFFF,stroke:#8A94A6,color:#1A1F26
+
+    class SV,SVH e
+    class ASK,G2,S3,VIS,PB,BM,DOT,HN,PH f
+    class MAP,CACHE,OUTF a
+</pre>
+    </div>
+    <figcaption>The 3-D GRF is cached to disk and silently reused when nside and seed match.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="col">
+    <h2><span class="num">03</span> Power-spectrum estimation chain</h2>
+    <p class="lede">
+      Linear, and each step's shape follows from the previous one. Both <code>covi</code>
+      and <code>dpkn</code> come from the noise pass, which is why the noise realisations
+      have to exist before any of this runs.
+    </p>
+  </div>
+
+  <figure class="figure">
+    <div class="figure-body">
+<pre class="mermaid">
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","lineColor":"#7C8698","primaryColor":"#F1F3F6","primaryTextColor":"#151A21","primaryBorderColor":"#3E4756"},"flowchart":{"curve":"basis","nodeSpacing":34,"rankSpacing":38}}%%
+flowchart TB
+    LVAL[/"lval — (Nbin,)&lt;br/&gt;from bin_info.npz"/]
+    BE["build_essential(nuc, dnuc, NE, lval, model)"]
+    COS[/"r · rp · fac · vfac&lt;br/&gt;kper (Nbin,) · kpara (NE,)"/]
+    LVAL --&gt; BE --&gt; COS
+
+    CL[/"cl — (Nbin, NE)"/]
+    CLN[/"cln — (Nreal, Nbin, NE)"/]
+
+    WIN["window(NE)&lt;br/&gt;Blackman–Nuttall"]
+    W[/"w — (NE,)"/]
+    WIN --&gt; W
+
+    CA["calc_A(NE, NE)&lt;br/&gt;cosine transform matrix"]
+
+    COVI{{"covi = 1 / std(cln, axis=0)²"}}
+    CLN --&gt; COVI
+
+    FPK["func_pk(cl, w, covi, vfac)&lt;br/&gt;MLE: (AᵀN⁻¹A)⁻¹AᵀN⁻¹ · [W·C_ℓ]"]
+    CL --&gt; FPK
+    W --&gt; FPK
+    COVI --&gt; FPK
+    COS -. "vfac" .-&gt; FPK
+    CA -. .-&gt; FPK
+
+    PK[/"pk — P(k⊥,k∥) (Nbin, NE)"/]
+    FPK --&gt; PK
+
+    FPKN["func_pk(cln, w, covi, vfac)"]
+    CLN --&gt; FPKN
+    DPKN{{"dpkn = std(pkn, axis=0)&lt;br/&gt;× N_nights²"}}
+    FPKN --&gt; DPKN
+
+    FM[/"flag_mask — (Nbin, NE) 0/1&lt;br/&gt;hand-built · excludes the wedge"/]
+
+    XS["X(pk, dpkn, flag_mask)"]
+    PK --&gt; XS
+    DPKN --&gt; XS
+    FM --&gt; XS
+    SIG[/"X · mu_est · sigma_est&lt;br/&gt;sigma calibrates the noise"/]
+    XS --&gt; SIG
+
+    BPK["binned_pk(kper, kpara, pk, sigma·dpkn, NBin, flag_mask)&lt;br/&gt;log bins · inverse-variance · drops empty bins"]
+    PK --&gt; BPK
+    SIG -. "sigma" .-&gt; BPK
+    DPKN --&gt; BPK
+    COS -. "kper, kpara" .-&gt; BPK
+    FM --&gt; BPK
+
+    BOUT[/"keff · ppk · dppk — (nzNBin,)"/]
+    BPK --&gt; BOUT
+
+    FDT["func_dT(kk, ppk, dppk)"]
+    BOUT --&gt; FDT
+    FINAL[/"Δ²(k) = k³P(k)/2π² · 2σ(k) · SNR · Δ²_UL(k)"/]
+    FDT --&gt; FINAL
+
+    classDef f fill:#F1F3F6,stroke:#3E4756,color:#151A21
+    classDef a fill:#FFFFFF,stroke:#8A94A6,color:#1A1F26
+    classDef n fill:#E7E4FA,stroke:#5B4CC4,color:#241C57
+    classDef o fill:#FCEFD6,stroke:#B0760B,color:#3A2A08
+
+    class BE,WIN,CA,FPK,XS,BPK,FDT f
+    class LVAL,COS,CL,W,PK,BOUT,FM a
+    class CLN,FPKN,COVI,DPKN n
+    class FINAL,SIG o
+</pre>
+    </div>
+    <figcaption>sigma_est from the X statistic rescales the noise before spherical binning.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="table-wrap">
+    <table>
+      <caption>Shape reference</caption>
+      <thead>
+        <tr><th>Stage</th><th>Function</th><th>In</th><th>Out</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td class="fn">sim_vis</td><td class="sh">UVFITS</td><td class="sh">UVFITS</td></tr>
+        <tr><td>1</td><td class="fn">grid</td><td class="sh">UVFITS</td><td class="sh">(Npol, 457, 457, 768) complex</td></tr>
+        <tr><td>2</td><td class="fn">mkbin</td><td class="sh">(457, 457, Nrea)</td><td class="sh">.npz — ni, NI, lval</td></tr>
+        <tr><td>3</td><td class="fn">doscf</td><td class="sh">(…, 768)</td><td class="sh">(…, 768 − 2·NW)</td></tr>
+        <tr><td>4</td><td class="fn">clfuncs.correlate</td><td class="sh">(2, Ngood, NC)</td><td class="sh">(Nbin, NC, NC)</td></tr>
+        <tr><td>4</td><td class="fn">correlate.correlate</td><td class="sh">(2, Ngood, NC)</td><td class="sh">(Nbin, NC)</td></tr>
+        <tr><td>5</td><td class="fn">func_pk</td><td class="sh">(…, Nbin, NE)</td><td class="sh">(…, Nbin, NE)</td></tr>
+        <tr><td>5</td><td class="fn">binned_pk</td><td class="sh">(…, Nbin, NE)</td><td class="sh">(…, nzNBin)</td></tr>
+        <tr><td>5</td><td class="fn">func_dT</td><td class="sh">(…, nzNBin)</td><td class="sh">4 × (…, nzNBin)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  Companion to docs/PIPELINE.md — stage reference, parameter tables, worked example, known issues.<br />
+  Source: docs/FLOWCHART.md · branch EasyRun_PS_pipeline
+</footer>

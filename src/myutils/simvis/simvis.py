@@ -348,6 +348,8 @@ from astropy.table import Table
 from astropy.io import fits
 from astropy.cosmology import Planck18 as cosmo # cosmological parameters , find comvoing distance
 
+from myutils.progress import Progress          # progress reporting for the long loops
+
 #------------------- Generate Multiple Realizations of GRF -----------------
 def aps(l):  
     r"""
@@ -591,9 +593,12 @@ def sky3dgrf(nside, seed, psfunc = ps):
     npix = hp.nside2npix(nside)    # no of pixels
     
     mapgrf = np.zeros((ncc,npix))  # make an empty array for grf for all channels
-    
+
+    _p = Progress(ncc, 'alm2map')
     for i in range(ncc):
         mapgrf[i] = hp.alm2map(alms[i], nside = nside, lmax = lmax) # loop over all channels
+        _p.update()
+    _p.close()
     
     end = time.time()
     hours, rem = divmod(end-start, 3600)
@@ -648,12 +653,15 @@ def allskysim(nside, seed, skysimtype, apsfunc = aps, psfunc = ps):
     
         # Generate the GRF
         map_2d_grf = np.zeros((Nrea, Npix))
-        
+
+        _p = Progress(Nrea, 'GRF maps')
         for ii in range(Nrea):
             map_2d_grf[ii] = grf(nside, lmax, apsfunc, seed)
             if seed!= None:
-                seed += 1 # Incrementing seed by 1 
+                seed += 1 # Incrementing seed by 1
                           # Means in 1st realization we get seed value = seed, next realization seed = seed + 1 and so on.
+            _p.update()
+        _p.close()
                 
         print(f"2D maps             : {Nrea} realizations.")
         print(f"l_max               : {lmax}")
@@ -976,11 +984,22 @@ def visgen_mwa_multi(nside, grfmap, ra_ptg, dec_ptg, bl, nu):
     chunks = np.array_split(np.arange(nbl), np.arange(chunk_size, nbl, chunk_size))
 
     vis = np.zeros((GRF_PB_Product.shape[0], nbl), dtype = np.complex128)
-    
+
+    # This is the dominant cost of the whole simulation: one exp() over
+    # (npix x chunk_size) complex values per chunk, then a matrix multiply. Left
+    # unreported it is the longest silence in the pipeline.
+    print(f"Chunks              : {len(chunks)} x {chunk_size} baselines, "
+          f"{dot_product.shape[0]:,} pixels", flush = True)
+    _p = Progress(len(chunks), 'Visibility')
+
     for ii in chunks:
         phase = calculate_phase(dot_product,bl[ii,:]) # Phase calculation
         vis[:, ii] = GRF_PB_Product@phase                  # Visibility Calculation
-        
+        del phase                                          # ~10 GB at nside=512
+        _p.update()
+
+    _p.close()
+
     # Multiply by Q_nu And dΩ
     vis =  Q_nu * dOmega * vis 
     
@@ -1025,8 +1044,12 @@ def sim_vis_hdul(hdulist, skysimtype, seed = None, apsfunc = aps, psfunc = ps):
     
     #print (hdulist.info()) 				# to check different headers
     
-    data_tmp = hdulist[0].data 				# to save visibilities in data
-    dataT = Table(data_tmp)                 # to convert data from array form to table form, readable
+    # Only the group parameters UU/VV/WW are needed here. Building an astropy Table
+    # over hdulist[0].data would materialise every visibility as well — several GB and
+    # minutes of cold read on a shared filesystem, all of it discarded.
+    print(f"Reading baselines   : UU/VV/WW (strided read over the whole file) ...",
+          flush = True)
+    _bl_start = time.time()
     #print(hdulist[0].header)
 
     
@@ -1040,10 +1063,13 @@ def sim_vis_hdul(hdulist, skysimtype, seed = None, apsfunc = aps, psfunc = ps):
 
     
     # Extract the baselines
-    u = dataT['UU']*blt.nu_c  # *nu_c for baseline unit   # *2.99792e8 (for meter unit)
-    v = dataT['VV']*blt.nu_c
-    w = dataT['WW']*blt.nu_c
+    u = np.copy(hdulist[0].data['UU'])*blt.nu_c  # *nu_c for baseline unit
+    v = np.copy(hdulist[0].data['VV'])*blt.nu_c
+    w = np.copy(hdulist[0].data['WW'])*blt.nu_c
     bln = np.stack((u,v,w),axis = 1) # baseline array
+
+    print(f"Baselines read      : {bln.shape[0]:,} in {time.time()-_bl_start:.1f}s",
+          flush = True)
     
     blt.nu_c = blt.nu_c*1.e-6  # Centered Frequency in MHz unit 1e-6 to convert from Hz to MHz
     
@@ -1120,7 +1146,10 @@ def sim_vis(uvinfits, uvoutfits, skysimtype, seed = None,  apsfunc = aps, psfunc
     print(f"chunk size          : {chunk_size}")
     start = time.time()
     
-    with fits.open(uvinfits) as hdulist:
+    # memmap = False: read the data unit once, sequentially. See the note in
+    # myutils.tge.grid.grid — lazily gathering the interleaved UU/VV/WW parameters
+    # from a random-groups file is pathologically slow on a network filesystem.
+    with fits.open(uvinfits, memmap = False) as hdulist:
         sim_vis_hdul(hdulist, skysimtype, seed, apsfunc, psfunc)
         hdulist.writeto(uvoutfits, overwrite = True) # note that the files will be overwritten
     

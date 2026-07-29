@@ -1,0 +1,307 @@
+# ============================================================================
+#  ps_pipeline — single configuration file
+# ----------------------------------------------------------------------------
+#  Every stage script and the SLURM submitter read this file and nothing else.
+#  Copy it, edit the copy, and point at it with:
+#
+#      export PS_CONFIG=/path/to/my_config.yaml
+#      # or:  python pipeline/01_uaps.py --config /path/to/my_config.yaml
+#
+#  Fields left as `null` are filled in automatically — either derived from
+#  another field or read out of the input UVFITS header. Those defaults are
+#  printed at the start of every run, so you always see what was used.
+# ============================================================================
+
+paths:
+  # Input UVFITS holding the real visibilities. Required.
+  input_uvfits: /users/schatterjee/scratch3/project_MWA/hyperdrive_residual-R5_LF_RA39p7/MWA_LF_RA_39p7DEG_GOOD_PTG_HYP-R5.fits
+
+  # Everything the pipeline writes goes under here. Created if absent.
+  output_dir: /users/schatterjee/scratch3/project_MWA/hyperdrive_residual-R5_LF_RA39p7/ps_run_RA_39p7DEG
+
+  # Label used in output filenames. null -> last 4 digits for a bare obsid
+  # (1000007200.fits -> 7200), otherwise the whole filename stem.
+  # Set it explicitly to keep product names short and meaningful.
+  index: RA39p7_R5
+
+  # UAPS reference UVFITS written by stage 1.
+  # null -> {output_dir}/{index}_uaps.fits
+  uaps_uvfits: null
+
+  # Cache directory for simulated HEALPix sky maps (can get large).
+  # null -> {output_dir}/grf
+  grf_dir: null
+
+
+observation:
+  # null -> read from the UVFITS header (CRVAL4, CDELT4, NAXIS4).
+  nuc_mhz: null          # central frequency,  header CRVAL4 * 1e-6
+  dnuc_mhz: null         # channel width,      header CDELT4 * 1e-6
+  nchan: null            # channel count,      header NAXIS4
+
+  # Channel range to process, inclusive. n2 null -> nchan - 1.
+  n1: 0
+  n2: null
+
+
+flagging:
+  # Coarse-band flagging applied by pipeline/00_flag.py.
+  #
+  # The MWA band is split into coarse bands (24 x 32 channels for a 768-channel
+  # observation). Each band has unusable channels at its edges from the polyphase
+  # filterbank response, and a corrupted centre channel from the DC term. This flags,
+  # for every coarse band:
+  #
+  #     the first N channels, the centre channel, and the last N channels
+  #
+  # N = 3 over 768 channels gives 168 flagged (21.9%); N = 4 gives 216 (28.1%).
+  enabled: true
+  coarse_edge_n: 4       # N — channels flagged at each end of every coarse band
+  n_coarse_bands: 24     # MWA has 24 coarse bands
+  coarse_width: null     # null -> nchan / n_coarse_bands (768/24 = 32)
+
+  # SAFETY: the input file is never modified. 00_flag.py copies it to
+  # {output_dir}/UVFITS/ and flags the copy; every later stage reads that copy.
+  work_subdir: UVFITS
+
+
+io:
+  # How UVFITS data is read.
+  #
+  #   false -> read the data unit once, sequentially (astropy memmap=False)
+  #   true  -> lazy, page-faulted access (astropy default)
+  #
+  # Random-groups UVFITS interleaves the UU/VV group parameters with each group's
+  # visibilities, so lazy access gathers one column via tens of thousands of scattered
+  # reads. Measured on this cluster: ~5-8 minutes COLD, 0.2 s warm. A sequential read
+  # streams at ~1 GB/s, i.e. a few seconds for a 2.7 GB file regardless of cache.
+  #
+  # The trade-off: when the file IS already cached, sequential costs ~2.5 s versus
+  # ~0.2 s lazy, because it copies the whole data unit into RAM.
+  #
+  # false is the right default for batch work, where each array task starts on a fresh
+  # node with a cold cache. Benchmark it yourself with pipeline/bench_read.py on a node
+  # that has not touched the file.
+  memmap: false
+
+
+gridding:
+  Umax: 250              # reject baselines with |U| > Umax  (wavelengths)
+  FWHM: 23               # primary beam FWHM (degrees)
+  f: 0.6                 # tapering parameter; f <= 1 tapers harder
+  nstokes: [0, 1]        # polarisation indices: 0=XX, 1=YY. Cross-TGE needs both.
+  flag: true             # apply UVFITS weight-based flagging (weight <= 0 -> 0)
+
+  # Gridding inner loop: numpy (reference) or numba (JIT, parallel over channels).
+  # numba avoids two ~2 MB allocations per baseline per polarisation and threads the
+  # accumulation over frequency, where each thread owns a disjoint GV[..., k] slice.
+  # VERIFY FIRST:  python pipeline/verify_engine.py
+  # It must report bit-identical before you switch this to numba.
+  # Verified 2026-07-28 with pipeline/verify_engine.py at 768 channels:
+  #   numpy 69.6s, numba 15.5s -> 4.5x, agreement to 5.8e-17 relative (one ULP).
+  engine: numba
+
+
+binning:
+  Nbin: 20               # number of annular |U| bins
+  binUmin: 6.0           # min |U| used for binning (wavelengths)
+  binUmax: 220           # max |U| used for binning (wavelengths)
+  Mg_min: 0.01           # reject grid points with UAPS self-correlation below this
+
+
+simulation:
+  nside: 512             # HEALPix resolution
+  Nrea: 10              # sky realisations; must be <= nchan
+  chunk_size: 400        # baselines per matrix multiply — 400/32GB, 200/16GB, 100 below
+  seed: 1                # base seed for the UAPS simulation
+
+
+scf:
+  enabled: true          # false -> skip smooth-component filtering entirely
+  SM_mhz: 2.0            # smoothing scale in MHz
+  window: hann           # hann | hamming | blackman | kaiser
+  method: fft            # fft | direct | auto
+
+  # Whether the UAPS normalisation pass is filtered too.
+  #
+  # Leave this false. The UAPS pass is gridded with nrel >= 0, which copies one
+  # realisation across every channel, so V_cg is constant in frequency — and the
+  # smooth component of a constant IS that constant. Filtering it therefore returns
+  # identically zero, making cl = el/ml infinite. M_g is a per-grid-point geometric
+  # normalisation, not a spectral one, so it should not be filtered.
+  #
+  # With this false, ml is truncated to the same number of frequency separations as
+  # the filtered data so the ratio stays aligned.
+  apply_to_uaps: false
+
+
+noise:
+  n_realisations: 10     # more is better for std(); 50 is what the tutorials use
+  seed_start: 10000      # realisation i uses seed_start + i — must not collide
+
+  # Realisations per SLURM array task; the array is ceil(n_realisations/per_task) tasks.
+  #
+  # Each task pays a large fixed cost before any science: Python imports on a cold node
+  # (5-7 min), the cold UVFITS read (minutes), and the numba JIT of correlate_fast
+  # (~33 s). Batching amortises that, and — the bigger effect — realisations after the
+  # first in a task hit a warm page cache, so their read drops from minutes to ~0.2 s.
+  #
+  # Raise to trade parallelism for efficiency; lower if nodes are plentiful and you want
+  # the shortest wall time. Make sure slurm.stages.noise.time covers per_task realisations.
+  per_task: 5
+
+
+clfuncs:
+  # Also keep the full MAPS C_l(nu_a, nu_b) as cl2d_{index}.npy, not just the
+  # collapsed C_l(dnu). Needed for the frequency-frequency maps in RA_11.pdf.
+  # Costs ~94 MB at Nbin=20, NC=768 and no extra compute.
+  keep_2d: true
+
+
+power_spectrum:
+  cosmology: Planck18    # Planck18 | FlatLambdaCDM
+  # Number of logarithmic k bins. The paper mask keeps ~500 modes over a narrow
+  # k range, and 8 bins leaves one of them empty (NaN, silently dropped). 6 fills
+  # every bin. Raise it only if you widen the mask.
+  NBin: 6
+  n_nights: 9            # nights of integration, used for the noise scaling
+
+  # Multiplicative factor applied to the single-realisation noise std.
+  # null -> sigma_N**2 with sigma_N = 60/sqrt(n_nights); at n_nights = 9 this is
+  # 20**2 = 400, reproducing the tutorials' hardcoded value.
+  # CHECK THIS AGAINST YOUR OWN INTEGRATION TIME — it scales every error bar.
+  noise_scale: null
+
+  # Frequency separations used. null -> nchan - 2*NW after SCF (e.g. 768 -> 668).
+  NE: null
+
+  # Mode selection. Written by stage 5 on first run, reused afterwards.
+  # DELETE the file to rebuild after changing anything below.
+  # null -> {output_dir}/flag_mask.npy
+  flag_mask: null
+
+  # Which (k_perp, k_para) modes enter the spherical average. Constraints are ANDed.
+  #
+  # preset: start from a named selection, then override individual keys below.
+  #   paper      the published mode selection of TTGE III (Sarkar et al. 2026,
+  #              arXiv:2604.24144, in Documentation/): k_perp 0.007-0.045,
+  #              k_para 0.135-1.399, plus the per-k_perp windows that mask the
+  #              contaminated streaks. The 0.135 floor is set by the 2 MHz SCF
+  #              smoothing scale, which is what scf.SM_mhz below gives, so it
+  #              carries over to this pipeline unchanged.
+  #   paper_box  the same region without the streak windows — more modes kept.
+  #   none       no selection.
+  # Comment `preset` out for a fully hand-specified mask.
+  # With a preset, `null` on any key below means "keep what the preset says".
+  # Give a real value to override it — including `false`, which is an override,
+  # not an absence. Without a preset, `null` means unconstrained.
+  mask:
+    preset: paper
+
+    # Exclude the foreground wedge: everything below the horizon line
+    #     [k_par]_H = (r / r' nu_c) k_perp = fac * k_perp
+    # which is the dashed line drawn on the cylindrical figures.
+    use_wedge: null
+    # Extra k_par above that line, in Mpc^-1. The wedge edge is not sharp — the
+    # instrument's frequency response smears it — so a buffer is normal practice.
+    # The paper preset relies on its k_para floor instead and leaves this at 0.
+    wedge_buffer: null
+
+    # Rectangular limits.
+    kpara_min: null
+    kpara_max: null
+    kperp_min: null
+    kperp_max: null
+
+    # Per-k_perp k_para windows from kpara_ranges / kpara_start_index below.
+    # The paper preset carries its own copy, so this only matters without a preset.
+    use_tabulated: null
+  kpara_ranges: [0.135, 0.228, 0.36, 0.5, 0.72, 0.8, 0.92, 1.09, 1.17, 1.39]
+  kpara_start_index: [0, 0, 1, 2, 2, 2]
+
+
+plots:
+  # Colour limits for |P(k_perp,k_par)|. Fixed rather than autoscaled so that panels
+  # and runs are directly comparable, and so a few pathological cells cannot stretch
+  # the scale for everything else. These match Documentation/RA_11.pdf.
+  cyl_vmin: 1.0e7
+  cyl_vmax: 2.0e15
+
+  # Published upper limits drawn on the spherical PS figures, by name from
+  # myutils.reference.DATASETS. [] for none.
+  #   ttge3_alpha11  TTGE III best single pointing centre — the like-for-like
+  #                  comparison, since this pipeline processes one field
+  #   ttge3_case_i   TTGE III, 23 pointing centres combined (their headline)
+  #   ttge3_case_ii  TTGE III, 14 pointing centres
+  #   ttge3_headline just the two abstract numbers, annotated
+  #   trott2020_eor0 / trott2020_eor2 / lofar2025 / hera2023   other experiments
+  #
+  # NOTE ON FIELD: TTGE III finds RA < ~22 deg to be its relatively foreground-free
+  # range and its headline limits come from there. This config's field is RA 39.7,
+  # outside that range, so expect our limits to sit above theirs.
+  reference: [ttge3_alpha11, ttge3_case_i]
+
+
+# ============================================================================
+#  SLURM — used by pipeline/submit.py. Ignored when stages are run directly.
+# ============================================================================
+slurm:
+  enabled: true
+
+  account: null                                        # null -> omit --account
+  partition: Main
+  qos: null                                            # null -> omit --qos
+
+  # Shell lines run before python in every job. This is where you activate the
+  # environment or load modules.
+  setup:
+    - source /idia/users/schatterjee/vnv_ilifu/vnvMWA/bin/activate
+
+  # Interpreter used inside jobs. null -> "python" from the setup environment.
+  python: null
+
+  # null -> {output_dir}/logs
+  log_dir: null
+
+  # universal -> every stage appends to one file, {log_dir}/pipeline_{index}.log,
+  #              with stderr merged in. Each job writes a banner naming the stage,
+  #              job id, array task and host, so concurrent tasks stay attributable.
+  # per_job    -> the old behaviour, one .out and .err per job.
+  log_mode: universal
+
+  mail_user: null                                      # null -> no mail
+  mail_type: FAIL
+
+  # Applied to every stage unless overridden below.
+  defaults:
+    time: "04:00:00"
+    mem: 32G
+    cpus_per_task: 4
+
+  # Per-stage overrides. Stage 4 additionally runs as an array job, one task
+  # per noise realisation, with at most `throttle` running at once.
+  stages:
+    flag:
+      time: "01:00:00"
+      mem: 16G           # holds the data unit in memory while rewriting weights
+      cpus_per_task: 2
+    uaps:
+      time: "08:00:00"
+      mem: 48G
+      cpus_per_task: 8
+    bininfo:
+      time: "01:00:00"
+      mem: 32G
+    data:
+      time: "06:00:00"
+      mem: 64G
+      cpus_per_task: 16    # the numba gridding kernel threads over frequency
+    noise:
+      time: "02:00:00"
+      mem: 64G             # SCF peaks near 25 GB at 768 channels; 32G is too tight
+      cpus_per_task: 16
+      throttle: 10
+    ps:
+      time: "00:30:00"
+      mem: 16G
+      cpus_per_task: 2

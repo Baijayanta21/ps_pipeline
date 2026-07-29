@@ -1,0 +1,21 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Packaging / build artefacts
+build/
+dist/
+*.egg-info/
+wheels/
+
+# Virtual environments
+.venv/
+venv/
+.myutils/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Pipeline outputs (large binaries — keep out of git)
+grf/
+GV_*.npy
