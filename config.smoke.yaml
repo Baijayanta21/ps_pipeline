@@ -82,8 +82,16 @@ power_spectrum:
   noise_scale: null
   NE: null               # -> 100
   flag_mask: null
+
+  # Same mask preset as the real config, so the smoke run exercises the code path
+  # production actually uses rather than the no-preset fallback. binUmax = 45 gives
+  # k_perp <~ 0.031, all inside the preset's 0.045 ceiling, so nothing is cut there;
+  # the k_para floor and the tabulated windows do the work.
+  mask:
+    preset: paper
+
   # kpara at NE = 100 spans roughly 0 to 4.6 Mpc^-1 in steps of ~0.047,
-  # so the default ranges below are all reachable.
+  # so the ranges below are all reachable.
   kpara_ranges: [0.135, 0.228, 0.36, 0.5, 0.72, 0.8, 0.92, 1.09, 1.17, 1.39]
   kpara_start_index: [0, 0, 1, 2, 2, 2]
 

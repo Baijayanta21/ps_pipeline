@@ -101,7 +101,7 @@ def main():
         made += mp.compare_spherical(
             loaded, out=out_dir / f'compare_spherical_{tag}',
             title=f'{tag} — spherical power spectrum',
-            reference=cfg.plots.get('reference') or None)
+            reference=pl.get('reference') or None)
 
     if 'cylindrical' in wanted:
         # one shared colour scale, as RA_11 does; per-panel autoscaling would

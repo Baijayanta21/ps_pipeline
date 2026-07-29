@@ -105,7 +105,7 @@ def main():
         if 'spherical' in wanted:
             made += mp.spherical_ps(
                 d, plot_dir / f'spherical_ps_{cfg.index}',
-                reference=cfg.plots.get('reference') or None)
+                reference=pl.get('reference') or None)
         if 'pk_cuts' in wanted:
             ranges = cfg.power_spectrum.get('kpara_ranges') or []
             made += mp.pk_cross_sections(
