@@ -198,23 +198,29 @@ power_spectrum:
   mask:
     preset: paper
 
-    # Exclude the foreground wedge: everything below the horizon line
+    # --- ALWAYS APPLIED: the foreground wedge ------------------------------
+    # Everything below the horizon line
     #     [k_par]_H = (r / r' nu_c) k_perp = fac * k_perp
-    # which is the dashed line drawn on the cylindrical figures.
-    use_wedge: null
-    # Extra k_par above that line, in Mpc^-1. The wedge edge is not sharp — the
-    # instrument's frequency response smears it — so a buffer is normal practice.
-    # The paper preset relies on its k_para floor instead and leaves this at 0.
+    # (the dashed line on the cylindrical figures) is excluded. There is no
+    # switch: a spherical average that includes the wedge measures foregrounds,
+    # not the 21-cm signal.
+    #
+    # Only the buffer is tunable — extra k_par above that line, in Mpc^-1. The
+    # wedge edge is not sharp, because the instrument's frequency response smears
+    # it, so a buffer is normal practice. The paper preset relies on its k_para
+    # floor instead and leaves this at 0.
     wedge_buffer: null
 
-    # Rectangular limits.
+    # --- OPTIONAL: rectangular k limits ------------------------------------
+    use_limits: null        # false -> ignore the four limits below
     kpara_min: null
     kpara_max: null
     kperp_min: null
     kperp_max: null
 
-    # Per-k_perp k_para windows from kpara_ranges / kpara_start_index below.
-    # The paper preset carries its own copy, so this only matters without a preset.
+    # --- OPTIONAL: per-k_perp k_para windows -------------------------------
+    # From kpara_ranges / kpara_start_index below. The paper preset carries its
+    # own copy, so this only matters without a preset.
     use_tabulated: null
   kpara_ranges: [0.135, 0.228, 0.36, 0.5, 0.72, 0.8, 0.92, 1.09, 1.17, 1.39]
   kpara_start_index: [0, 0, 1, 2, 2, 2]

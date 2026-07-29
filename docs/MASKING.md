@@ -76,36 +76,65 @@ attribution. They are not ad hoc — they are this published mask.
 
 ## 2. Using it
 
+### The wedge is not optional
+
+**Every selection excludes the foreground wedge.** There is no switch, and an empty
+mask spec still gives a wedge cut. A spherical average that includes the wedge
+measures foregrounds, not the 21-cm signal, so it is not something to leave off by
+accident.
+
+Only `wedge_buffer` is tunable — extra $k_\parallel$ above the horizon line, useful
+because the instrument's frequency response smears the wedge edge.
+
+`use_wedge: false` is a hard error rather than a silent no-op, so old configs that
+carry it get told instead of quietly running a different analysis. `use_wedge: true`
+is accepted and ignored.
+
+### Everything else is a switch
+
 ```yaml
 power_spectrum:
   mask:
-    preset: paper        # or paper_box, or none
-    wedge_buffer: null   # null = keep what the preset says
+    preset: paper        # or paper_box, or wedge_only
+
+    wedge_buffer: null   # always-on cut; only the buffer is tunable
+
+    use_limits: null     # false -> ignore the four k limits
+    kperp_min: null
+    kperp_max: null
+    kpara_min: null
+    kpara_max: null
+
+    use_tabulated: null  # false -> drop the per-k_perp streak windows
 ```
 
 **With a preset, `null` means "inherit".** Any real value overrides — including
 `false`, which is an override and not an absence. Without a preset, `null` means
-unconstrained.
+unconstrained, and `use_limits` defaults to on whenever any limit is actually set.
 
-| preset | selection |
-|---|---|
-| `paper` | the three cuts **and** the streak windows |
-| `paper_box` | the three cuts only — more modes, less hand-tuning |
-| `none` | everything |
+| preset | wedge | limits | windows | modes (with_SCF) |
+|---|---|---|---|---|
+| `paper` | always | ✓ | ✓ | 488 |
+| `paper_box` | always | ✓ | — | 1,089 |
+| `wedge_only` | always | — | — | 12,570 |
+
+`none` is kept as an alias for `wedge_only`. It used to mean "no selection at all",
+which is no longer possible.
 
 Stage 5 prints the resolved preset and the survivor count per constraint, so the
 log records what was applied rather than what was typed:
 
 ```
 mode mask   : built from config (preset: paper)
-  wedge: excluding k_par <= 3.519 * k_perp
-  modes available          13,360
-  outside the wedge        12,570
-  inside k limits           1,092
-  in tabulated windows        488
-  selected (all combined)     488 (3.7%)
-  k_perp spanned           0.0078 - 0.0448 Mpc^-1
-  k_para spanned           0.1391 - 1.3840 Mpc^-1
+  wedge (always): excluding k_par <= 3.519 * k_perp
+  optional      : k limits, tabulated windows
+  modes available              13,360
+  outside the wedge [always]   12,570
+  inside k limits              1,092
+  in tabulated windows         488
+  selected (all combined)      488 (3.7%)
+  k_perp spanned               0.0078 - 0.0448 Mpc^-1
+  k_para spanned               0.1391 - 1.3840 Mpc^-1
 ```
 
 To depart from it, work in `Tutorials/masking.ipynb`: it recomputes everything

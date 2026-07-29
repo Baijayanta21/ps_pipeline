@@ -47,10 +47,12 @@ def build_flag_mask(cfg, kper, kpara, fac):
     mask, parts = msk.build_mask(kper, kpara, fac, spec)
     print("mode mask   : built from config"
           f"{f' (preset: {preset})' if preset else ''}")
-    if spec.get('use_wedge'):
-        buf = spec.get('wedge_buffer', 0.0) or 0.0
-        print(f"  wedge: excluding k_par <= {fac:.3f} * k_perp"
-              f"{f' + {buf}' if buf else ''}")
+    buf = spec.get('wedge_buffer') or 0.0
+    print(f"  wedge (always): excluding k_par <= {fac:.3f} * k_perp"
+          f"{f' + {buf}' if buf else ''}")
+    opts = [n for n, on in (('k limits', 'ranges' in parts),
+                            ('tabulated windows', 'tabulated' in parts)) if on]
+    print(f"  optional      : {', '.join(opts) if opts else 'none — wedge only'}")
     print(msk.describe(parts, kper, kpara, mask))
 
     if not mask.any():

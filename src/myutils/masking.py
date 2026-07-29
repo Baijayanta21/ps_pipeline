@@ -2,10 +2,12 @@ r"""
 Mode selection in the :math:`(k_\perp, k_\parallel)` plane
 =========================================================
 
-Which modes enter the spherical average. Three constraints, combinable:
+Which modes enter the spherical average. One mandatory constraint, two optional
+ones on top of it.
 
-**Wedge.** Foreground emission from a source at angle :math:`\theta` leaks up to
-a delay set by the geometry, so smooth-spectrum foregrounds occupy a wedge below
+**Wedge — always applied, not switchable.** Foreground emission from a source at
+angle :math:`\theta` leaks up to a delay set by the geometry, so smooth-spectrum
+foregrounds occupy a wedge below
 
 .. math::
 
@@ -13,18 +15,23 @@ a delay set by the geometry, so smooth-spectrum foregrounds occupy a wedge below
 
 (the *horizon* line — ``fac`` is what :func:`myutils.psfuncs.psestimation.build_essential`
 returns and what the dashed line in the cylindrical figures marks). Modes **below**
-that line are foreground-dominated and are excluded. A buffer can be added above the
-line, which is standard practice: the wedge has soft edges from the instrument's
-frequency response, so the horizon line alone leaves residual leakage.
+that line are foreground-dominated and are always excluded. There is deliberately no
+switch for this: a spherical average that includes the wedge is not a 21-cm
+measurement, it is a foreground measurement, and making that a toggle invites it
+being left off by accident.
 
-**Rectangular ranges.** Simple :math:`k_\perp` and :math:`k_\parallel` limits — a
-:math:`k_\parallel` floor removes the DC and first few modes where any filtering
-leaves residuals, and a :math:`k_\perp` ceiling drops the sparsely-sampled long
+Only ``wedge_buffer`` is tunable — extra :math:`k_\parallel` above the horizon line.
+The wedge edge is soft, because the instrument's frequency response smears it, so a
+buffer is standard practice.
+
+**Rectangular ranges — optional,** gated by ``use_limits``. Simple :math:`k_\perp`
+and :math:`k_\parallel` limits: a :math:`k_\parallel` floor removes modes where
+filtering leaves residuals, a :math:`k_\perp` ceiling drops the sparsely-sampled long
 baselines.
 
-**Tabulated windows.** A hand-picked per-:math:`k_\perp` list of :math:`k_\parallel`
-bands. These are not arbitrary: they are the published mode selection of TTGE III
-(see :data:`PAPER`), carried over from the tutorials.
+**Tabulated windows — optional,** gated by ``use_tabulated``. A per-:math:`k_\perp`
+list of :math:`k_\parallel` bands. These are not arbitrary: they are the published
+mode selection of TTGE III (see :data:`PAPER`), carried over from the tutorials.
 
 Every function returns a boolean array of shape ``(len(kper), len(kpara))`` that is
 **True where the mode is used**.
@@ -65,8 +72,8 @@ __all__ = ['wedge_mask', 'range_mask', 'tabulated_mask', 'build_mask',
 #: The paper's :math:`k_\perp` grid (0.007-0.146, 20 bins) is the same as this
 #: pipeline's default, so the bands land on the same bins.
 PAPER = dict(
-    use_wedge=True,
     wedge_buffer=0.0,        # the box below is what does the work; see the note
+    use_limits=True,
     kperp_min=0.007, kperp_max=0.045,
     kpara_min=0.135, kpara_max=1.399,
     use_tabulated=True,
@@ -75,15 +82,20 @@ PAPER = dict(
 )
 
 #: Named specs usable as ``mask: {preset: paper}`` in the config, or as the
-#: ``spec`` argument anywhere a dict is accepted.
+#: ``spec`` argument anywhere a dict is accepted. Every one of them excludes the
+#: wedge — that is not a property of the preset, it is unconditional.
 PRESETS = {
     'paper': PAPER,
-    #: The box and wedge without the streak tabulation — the paper's region of
-    #: interest, every mode in it kept. More modes, less hand-tuning.
+    #: The box without the streak tabulation — the paper's region of interest,
+    #: every mode in it kept. More modes, less hand-tuning.
     'paper_box': dict(PAPER, use_tabulated=False),
-    #: No selection at all; everything enters the average.
-    'none': {},
+    #: Nothing but the wedge. The widest selection available.
+    'wedge_only': dict(use_limits=False, use_tabulated=False),
 }
+
+#: Old name for ``wedge_only``. It used to mean "no selection at all", which is no
+#: longer possible now that the wedge is mandatory.
+PRESETS['none'] = PRESETS['wedge_only']
 
 
 def resolve_spec(spec):
@@ -92,6 +104,13 @@ def resolve_spec(spec):
     ``spec`` may be ``None``, a preset name, or a dict. Keys given alongside
     ``preset`` override the preset, so ``{'preset': 'paper', 'wedge_buffer': 0.05}``
     is the paper's selection with a buffer added.
+
+    Raises
+    ------
+    ValueError
+        If ``use_wedge: false`` is given. The wedge cut is no longer optional, and
+        honouring the key would be impossible while quietly dropping it would run a
+        different analysis than the config asks for.
     """
     if spec is None:
         return {}
@@ -102,6 +121,17 @@ def resolve_spec(spec):
             raise KeyError(f"unknown mask preset {spec!r}. "
                            f"Available: {', '.join(sorted(PRESETS))}") from None
     spec = dict(spec)
+
+    # use_wedge was a switch before the wedge became mandatory.
+    if 'use_wedge' in spec:
+        if spec.pop('use_wedge') is False:
+            raise ValueError(
+                "mask.use_wedge: false is no longer supported — the foreground "
+                "wedge is always excluded. A spherical average that includes the "
+                "wedge measures foregrounds, not the 21-cm signal. Remove the key; "
+                "to keep more modes near the boundary set wedge_buffer: 0.0, and "
+                "to widen the selection use preset: wedge_only.")
+
     name = spec.pop('preset', None)
     if name is None:
         return spec
@@ -172,16 +202,17 @@ def build_mask(kper, kpara, fac, spec=None):
     ``spec`` is the ``power_spectrum.mask`` config section::
 
         preset: paper            start from a named selection (see PRESETS)
-        use_wedge: true          exclude modes below fac*k_perp
         wedge_buffer: 0.0        Mpc^-1 added above the horizon line
-        kperp_min / kperp_max    rectangular limits, null for unbounded
+        use_limits: true         apply the rectangular k limits below
+        kperp_min / kperp_max    null for unbounded
         kpara_min / kpara_max
         use_tabulated: false     intersect with the published k_para windows
 
     It may also be a bare preset name. Keys given next to ``preset`` override it.
 
-    Constraints are ANDed: a mode survives only if every active one keeps it. With
-    no spec, or an empty one, everything is selected.
+    **The wedge is always excluded**; there is no switch for it, and an empty spec
+    still gives a wedge cut. The other two constraints are opt-in and are ANDed on
+    top: a mode survives only if every active constraint keeps it.
 
     Returns
     -------
@@ -191,26 +222,28 @@ def build_mask(kper, kpara, fac, spec=None):
         Per-constraint survivor counts, for reporting.
     """
     spec = resolve_spec(spec)
-    mask = np.ones((len(kper), len(kpara)), dtype=bool)
-    parts = {'total': mask.size}
+    parts = {'total': len(kper) * len(kpara)}
 
-    if spec.get('use_wedge', False):
-        w = wedge_mask(kper, kpara, fac, spec.get('wedge_buffer', 0.0) or 0.0)
-        parts['wedge'] = int(w.sum())
-        mask &= w
+    # The wedge is mandatory. Only the buffer is tunable.
+    buf = spec.get('wedge_buffer') or 0.0
+    mask = wedge_mask(kper, kpara, fac, buf)
+    parts['wedge'] = int(mask.sum())
+    parts['wedge_buffer'] = float(buf)
 
     lims = {k: spec.get(k) for k in
             ('kperp_min', 'kperp_max', 'kpara_min', 'kpara_max')}
-    if any(v is not None for v in lims.values()):
+    # Default on when limits are actually given, so a spec that predates the
+    # use_limits switch behaves as it always did.
+    if spec.get('use_limits', any(v is not None for v in lims.values())):
         r = range_mask(kper, kpara, **lims)
         parts['ranges'] = int(r.sum())
-        mask &= r
+        mask = mask & r
 
     if spec.get('use_tabulated', False):
         t = tabulated_mask(kper, kpara, spec.get('kpara_ranges') or [],
                            spec.get('kpara_start_index') or [])
         parts['tabulated'] = int(t.sum())
-        mask &= t
+        mask = mask & t
 
     parts['selected'] = int(mask.sum())
     return mask, parts
@@ -218,20 +251,23 @@ def build_mask(kper, kpara, fac, spec=None):
 
 def describe(parts, kper=None, kpara=None, mask=None):
     """Human-readable summary of what each constraint kept."""
-    lines = [f"  modes available          {parts['total']:,}"]
-    for key, label in (('wedge', 'outside the wedge'),
-                       ('ranges', 'inside k limits'),
-                       ('tabulated', 'in tabulated windows')):
+    buf = parts.get('wedge_buffer') or 0.0
+    w = 28
+    lines = [f"  {'modes available':<{w}s} {parts['total']:,}"]
+    for key, label in (
+            ('wedge', f"outside the wedge{f' (+{buf:g})' if buf else ''} [always]"),
+            ('ranges', 'inside k limits'),
+            ('tabulated', 'in tabulated windows')):
         if key in parts:
-            lines.append(f"  {label:<24s} {parts[key]:,}")
-    lines.append(f"  selected (all combined)  {parts['selected']:,} "
+            lines.append(f"  {label:<{w}s} {parts[key]:,}")
+    lines.append(f"  {'selected (all combined)':<{w}s} {parts['selected']:,} "
                  f"({100 * parts['selected'] / max(parts['total'], 1):.1f}%)")
     if mask is not None and kper is not None and kpara is not None and mask.any():
         rows = np.where(mask.any(axis=1))[0]
         cols = np.where(mask.any(axis=0))[0]
-        lines.append(f"  k_perp spanned           {kper[rows[0]]:.4f} - "
+        lines.append(f"  {'k_perp spanned':<{w}s} {kper[rows[0]]:.4f} - "
                      f"{kper[rows[-1]]:.4f} Mpc^-1")
-        lines.append(f"  k_para spanned           {kpara[cols[0]]:.4f} - "
+        lines.append(f"  {'k_para spanned':<{w}s} {kpara[cols[0]]:.4f} - "
                      f"{kpara[cols[-1]]:.4f} Mpc^-1")
     return '\n'.join(lines)
 
