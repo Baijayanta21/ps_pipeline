@@ -1,6 +1,37 @@
 # ps_pipeline
 Necessary codes to estimate power spectrum from visibility data using tge **Tapered Gridded Estimator**.
 
+▶️ **[How to run it: `docs/RUNNING.md`](docs/RUNNING.md)** — install, configure, submit.
+📖 **[Pipeline reference: `docs/PIPELINE.md`](docs/PIPELINE.md)** — stage-by-stage guide with
+array shapes, parameter tables, and known issues.
+📡 **[Flowcharts: `docs/FLOWCHART.md`](docs/FLOWCHART.md)** — the three passes, call graphs, data flow.
+🎯 **[Mode selection: `docs/MASKING.md`](docs/MASKING.md)** — the published $(k_\perp, k_\parallel)$
+mask from arXiv:2604.24144, and comparing against published upper limits.
+
+## Quick start
+
+One config file drives every stage. Edit paths and SLURM settings in
+[`config.yaml`](config.yaml), then:
+
+```bash
+pip install -e .
+export PS_CONFIG=$PWD/config.yaml
+
+python -m myutils.config              # check the resolved configuration
+python pipeline/submit.py --dry-run   # inspect the generated sbatch scripts
+python pipeline/submit.py             # submit the chained pipeline
+```
+
+Without SLURM, run the stages directly in order:
+
+```bash
+python pipeline/01_uaps.py      # UAPS reference simulation
+python pipeline/02_bininfo.py   # annular binning information
+python pipeline/03_data.py      # data + UAPS passes -> cl
+python pipeline/04_noise.py     # noise realisations -> cln
+python pipeline/05_ps.py        # power spectrum -> ps_{index}.npz
+```
+
 ## How to install
 
 First create a vitual environment through this :
