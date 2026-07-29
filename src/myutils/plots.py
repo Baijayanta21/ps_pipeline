@@ -99,8 +99,21 @@ def style():
 
 
 def _finish(fig, out):
-    """Return the figure when *out* is None (notebooks), else save and close it."""
+    """Return the figure when *out* is None (notebooks), else save and close it.
+
+    The figure is closed either way. Under ``%matplotlib inline`` the backend
+    auto-displays every *open* figure at the end of a cell, and Jupyter then renders
+    the returned ``Figure`` a second time from its repr — so a cell ending in
+    ``mp.cl_dnu_panels(...)`` drew two identical plots. Closing it drops the
+    automatic copy and leaves the returned one.
+
+    Nothing is lost by closing: a closed figure keeps its canvas, so it still
+    renders in a notebook, still works with ``display(fig)``, and can still be
+    passed to :func:`save`.
+    """
+    import matplotlib.pyplot as plt
     if out is None:
+        plt.close(fig)
         return fig
     return save(fig, out)
 
@@ -502,6 +515,18 @@ def load_run(path):
         if not hits:
             raise FileNotFoundError(f"no ps_*.npz in {p}")
         p = hits[0]
+    elif not p.exists():
+        # Most often the config was repointed at another dataset and that one has
+        # not been processed yet. np.load's own error names the path but not the
+        # cause, which sends people looking for a bug in the notebook.
+        parent = p.parent
+        near = (sorted(d.name for d in parent.iterdir() if d.is_dir())
+                if parent.is_dir() else [])
+        raise FileNotFoundError(
+            f"{p} does not exist.\n"
+            f"If you repointed the config at a different observation, run the "
+            f"pipeline for it first:  python pipeline/run_variants.py --local\n"
+            f"Present in {parent}: {near or '(nothing — not processed yet)'}")
     return np.load(p)
 
 
@@ -669,7 +694,10 @@ def cl_dnu_panels(runs, lval, dnuc, ell_indices=None, n_bins=None, max_dnu=None,
     for row in axes:
         row[0].set_ylabel(r'$C_{\ell}(\Delta\nu)$  [mK$^2$]')
 
-    flat[0].legend(loc='best')
+    # One run needs no legend — the title already names it, and a key repeating a
+    # single label just covers data. Two or more, identity must not be colour-alone.
+    if len(runs) > 1:
+        flat[0].legend(loc='best')
     if title:
         fig.suptitle(title, y=1.01)
     fig.tight_layout()
