@@ -619,7 +619,7 @@ def load_cl(src, kind='cl'):
 
 
 def cl_dnu_panels(runs, lval, dnuc, ell_indices=None, n_bins=None, max_dnu=None,
-                  ncols=3, out=None, title=None):
+                  ncols=3, out=None, title=None, ylim=None):
     r"""Small multiples of :math:`C_{\ell}(\Delta\nu)`, one panel per :math:`\ell`.
 
     This is the "All 3 cases" figure in ``Documentation/RA_11.pdf`` — the same field
@@ -640,12 +640,19 @@ def cl_dnu_panels(runs, lval, dnuc, ell_indices=None, n_bins=None, max_dnu=None,
         Show the first N bins instead. Ignored if ``ell_indices`` is given.
     max_dnu : float, optional
         Truncate the :math:`\Delta\nu` axis, e.g. ``10.2`` as in RA_11.
+    ylim : tuple, optional
+        ``(lo, hi)`` applied to every panel. Use this rather than ``plt.ylim`` after
+        the call: the returned figure is closed (so it renders exactly once), which
+        means pyplot has no current figure and ``plt.ylim`` would silently build a
+        new empty one. Equivalent manual form is
+        ``for ax in fig.axes: ax.set_ylim(...)``.
 
     Notes
     -----
     Every panel shares one y-scale by default only if the runs are comparable; here
     each panel autoscales, matching RA_11, because the amplitude falls steeply with
-    :math:`\ell` and a shared scale would flatten the high-\ :math:`\ell` panels.
+    :math:`\ell` and a shared scale would flatten the high-\ :math:`\ell` panels —
+    which is also what a single ``ylim`` across all panels will do.
     """
     import matplotlib.pyplot as plt
 
@@ -676,14 +683,28 @@ def cl_dnu_panels(runs, lval, dnuc, ell_indices=None, n_bins=None, max_dnu=None,
     flat = axes.ravel()
 
     for ax, ib in zip(flat, ell_indices):
+        shown = []
         for (label, cl), colour in zip(loaded, PALETTE):
             dnu, keep = axis_for(cl)
             n = f" (NE={cl.shape[-1]})" if len(loaded) > 1 else ''
-            ax.plot(dnu[keep], cl[ib][keep], color=colour, lw=1.5,
-                    label=f'{label}{n}')
+            y = np.asarray(cl[ib][keep], dtype=float)
+            ax.plot(dnu[keep], y, color=colour, lw=1.5, label=f'{label}{n}')
+            shown.append(y)
         ax.axhline(0.0, color=_MUTED, lw=0.8, ls=':')
         ax.set_title(rf'$\ell = {int(lval[ib])}$')
         ax.margins(x=0.02)
+
+        # Scale to the data actually on screen. axhline(0) spans the axes at y = 0
+        # and matplotlib counts it when autoscaling, so a panel whose values sit at
+        # 200-350 would still be drawn from 0 — wasting most of the height and
+        # flattening the structure. Setting the limits from the plotted points only
+        # keeps the zero line as a reference without letting it set the scale, and it
+        # follows max_dnu automatically because `keep` already truncated the data.
+        finite = np.concatenate([a[np.isfinite(a)] for a in shown]) if shown else []
+        if len(finite):
+            lo, hi = float(finite.min()), float(finite.max())
+            pad = 0.05 * (hi - lo) if hi > lo else max(abs(hi), 1.0) * 0.05
+            ax.set_ylim(lo - pad, hi + pad)
 
     for ax in flat[len(ell_indices):]:
         ax.set_visible(False)
@@ -693,6 +714,10 @@ def cl_dnu_panels(runs, lval, dnuc, ell_indices=None, n_bins=None, max_dnu=None,
             ax.set_xlabel(r'$\Delta\nu$  [MHz]')
     for row in axes:
         row[0].set_ylabel(r'$C_{\ell}(\Delta\nu)$  [mK$^2$]')
+
+    if ylim is not None:
+        for ax in flat[:len(ell_indices)]:
+            ax.set_ylim(*ylim)
 
     # One run needs no legend — the title already names it, and a key repeating a
     # single label just covers data. Two or more, identity must not be colour-alone.
