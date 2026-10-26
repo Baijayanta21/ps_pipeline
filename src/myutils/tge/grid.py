@@ -432,7 +432,7 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
 
 
             subgrid  = np.multiply.outer(wt,vis) # wt[...,None]*vis
-            csubgrid = np.conjugate(subgrid[::-1,::-1]) #np.multiply.outer(wt[::-1,::-1],np.conjugate(vis))
+            #csubgrid = np.conjugate(subgrid[::-1,::-1]) #np.multiply.outer(wt[::-1,::-1],np.conjugate(vis))
 
             # indices of the nearby grid point for that baseline
             nx = Ng+(nuv[ii,0]) 
@@ -441,11 +441,14 @@ def grid(infile, n1, n2, nrel, Umax, FWHM, f, Flag, nstokes, seed = None):
             GV[st,nx-Nm:nx+Nm+1,ny-Nm:ny+Nm+1] += subgrid
 
             # indices of the nearby grid point for that conjugate baseline
-            nx = Ng-(nuv[ii,0])
-            ny = Ng-(nuv[ii,1])
+            # nx = Ng-(nuv[ii,0])
+            # ny = Ng-(nuv[ii,1])
 
-            GV[st,nx-Nm:nx+Nm+1,ny-Nm:ny+Nm+1] += csubgrid
+            # GV[st,nx-Nm:nx+Nm+1,ny-Nm:ny+Nm+1] += csubgrid
 
+
+    GV += np.conjugate(np.flip(GV,axis=(1,2)))
+    
     MM = 2*Nm
     
     hdul.close() # close the fits object
